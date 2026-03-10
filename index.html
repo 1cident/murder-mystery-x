@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Murder Mystery X</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Special+Elite&display=swap" rel="stylesheet">
+    <style>
+        body { margin: 0; background: #0f0f0f; color: #d4af37; font-family: 'Special Elite', cursive; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        #game-ui { border: 3px solid #d4af37; padding: 40px; background: rgba(20, 20, 20, 0.95); box-shadow: 0 0 30px rgba(212, 175, 55, 0.2); text-align: center; width: 350px; }
+        h1 { font-family: 'Bangers', cursive; font-size: 2.5em; margin-bottom: 20px; text-shadow: 2px 2px #000; }
+        input { width: 90%; padding: 10px; margin: 5px 0; background: #000; border: 1px solid #d4af37; color: #d4af37; }
+        button { display: block; width: 100%; padding: 10px; margin: 10px 0; background: transparent; border: 2px solid #d4af37; color: #d4af37; cursor: pointer; }
+        button:hover { background: #d4af37; color: #000; }
+        #main-menu, #params-menu { display: none; }
+    </style>
+</head>
+<body>
+
+<div id="game-ui">
+    <div id="auth-menu">
+        <h1>MURDER MYSTERY X</h1>
+        <input type="text" id="username" placeholder="Pseudo">
+        <input type="password" id="password" placeholder="Mot de passe">
+        <button onclick="register()">S'INSCRIRE</button>
+        <button onclick="login()">SE CONNECTER</button>
+    </div>
+
+    <div id="main-menu">
+        <h1>BIENVENUE</h1>
+        <button onclick="startGame()">JOUER</button>
+        <button onclick="toggleParams()">PARAMÈTRES</button>
+    </div>
+    
+    <div id="params-menu">
+        <button onclick="toggleParams()">RETOUR</button>
+    </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const socket = io(); 
+
+    function register() {
+        socket.emit('register', { username: document.getElementById('username').value, password: document.getElementById('password').value });
+    }
+
+    function login() {
+        socket.emit('login', { username: document.getElementById('username').value, password: document.getElementById('password').value });
+    }
+
+    socket.on('message', (msg) => {
+        alert(msg);
+        if(msg === 'Connexion réussie !') {
+            document.getElementById('auth-menu').style.display = 'none';
+            document.getElementById('main-menu').style.display = 'block';
+        }
+    });
+
+    function startGame() { console.log("Jeu lancé !"); }
+    function toggleParams() { /* Logique de bascule */ }
+</script>
+</body>
+</html>
