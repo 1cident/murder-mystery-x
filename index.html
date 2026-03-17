@@ -2,39 +2,37 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Murder Mystery 3D - Grande Map</title>
+    <title>Murder Mystery 3D - Corrigé</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
-        #hud { position: absolute; top: 10px; left: 10px; color: #00d4ff; z-index: 10; font-size: 1.5em; text-shadow: 2px 2px #000; }
-        #instructions { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); color: white; z-index: 100; }
-        input { padding: 10px; margin: 10px; font-size: 1.2em; background: #222; color: white; border: 1px solid #00d4ff; }
-        button { padding: 15px 30px; font-size: 1.2em; cursor: pointer; background: #00d4ff; border: none; font-weight: bold; color: black; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+        #hud { position: absolute; top: 15px; left: 15px; color: #00d4ff; z-index: 10; font-size: 1.5em; font-weight: bold; text-shadow: 2px 2px #000; pointer-events: none; }
+        #instructions { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.95); color: white; z-index: 100; text-align: center; }
+        #menu-box { background: #111; padding: 40px; border: 2px solid #00d4ff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 212, 255, 0.2); }
+        input { padding: 12px; margin: 15px 0; font-size: 1.1em; background: #000; color: #fff; border: 1px solid #00d4ff; text-align: center; width: 200px; }
+        button { padding: 15px 40px; font-size: 1.1em; cursor: pointer; background: #00d4ff; border: none; font-weight: bold; color: #000; transition: 0.3s; }
+        button:hover { background: #fff; transform: scale(1.05); }
+        canvas { display: block; }
     </style>
 </head>
 <body>
 
-<div id="hud">Rôle : En attente...</div>
+<div id="hud">Rôle : Non connecté</div>
+
 <div id="instructions">
-    <h1 style="color: #00d4ff;">MURDER MYSTERY 3D</h1>
-    <input type="text" id="nickname" placeholder="Ton Pseudo..." maxlength="10">
-    <button id="joinBtn">ENTRER DANS LE LABYRINTHE</button>
+    <div id="menu-box">
+        <h1 style="color: #00d4ff; margin-top: 0;">MURDER MYSTERY 3D</h1>
+        <input type="text" id="nickname" placeholder="Ton Pseudo..." maxlength="12">
+        <br>
+        <button id="joinBtn">REJOINDRE LA PARTIE</button>
+        <p style="color: #666; font-size: 0.9em; margin-top: 20px;">ZQSD pour bouger | Souris pour regarder | Espace pour attaquer</p>
+    </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
 <script>
+    // --- CONFIGURATION ---
     const socket = io("https://murder-mystery-x.onrender.com");
     let scene, camera, renderer, players = {}, playerMeshes = {};
-    let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-    let prevTime = performance.now();
-    let isReady = false;
-
-    // --- GRANDE MAP (1 = Mur, 0 = Vide) ---
-    const map = [
-        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-        [1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-        [1,0,1,1,0,1,0,1,1,1,1,1,1,1,0,1,1,1,0,1],
-        [1,0,1,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,1],
-        [1,0,1,0,1,1,1,1,1,1,0,1,0,1,1,1,0,1,0,1],
-        [1,0,0,0,
+    let is
