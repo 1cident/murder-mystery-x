@@ -2,19 +2,19 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>MMX - QUARTIER NÉON</title>
+    <title>MMX - QUARTIER JOUR</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #010105; font-family: sans-serif; }
-        #hud { position: absolute; top: 20px; left: 20px; color: #00f2ff; font-size: 24px; font-weight: bold; text-shadow: 0 0 10px #00f2ff; z-index: 10; pointer-events: none; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 14px; height: 14px; border: 2px solid #00f2ff; border-radius: 50%; transform: translate(-50%, -50%); z-index: 5; pointer-events: none; opacity: 0.5; }
-        #click-hint { position: absolute; bottom: 20px; width: 100%; text-align: center; color: white; opacity: 0.6; font-size: 14px; }
+        body { margin: 0; overflow: hidden; background: #87CEEB; font-family: sans-serif; }
+        #hud { position: absolute; top: 20px; left: 20px; color: #004466; font-size: 24px; font-weight: bold; text-shadow: 1px 1px 2px white; z-index: 10; pointer-events: none; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 14px; height: 14px; border: 2px solid #004466; border-radius: 50%; transform: translate(-50%, -50%); z-index: 5; pointer-events: none; }
+        #click-hint { position: absolute; bottom: 20px; width: 100%; text-align: center; color: #004466; font-weight: bold; background: rgba(255,255,255,0.5); padding: 5px 0; }
     </style>
 </head>
 <body>
 
     <div id="hud">Rôle : Assignation...</div>
     <div id="crosshair"></div>
-    <div id="click-hint">Cliquez une fois pour activer la caméra</div>
+    <div id="click-hint">CLIQUE ICI POUR BOUGER ET JOUER</div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
@@ -25,9 +25,8 @@
         const keys = {};
         let prevTime = performance.now();
 
-        // 1. DÉMARRAGE FORCÉ
         window.onload = () => {
-            const nick = "User-" + Math.floor(Math.random() * 999);
+            const nick = "Player-" + Math.floor(Math.random() * 999);
             try {
                 socket = io("https://murder-mystery-x.onrender.com");
                 socket.on('connect', () => socket.emit('joinGame', nick));
@@ -35,6 +34,8 @@
             } catch(e) { console.error(e); }
             
             initGraphics();
+            
+            // On force le démarrage au clic
             document.addEventListener('mousedown', () => {
                 document.body.requestPointerLock();
                 document.getElementById('click-hint').style.display = 'none';
@@ -44,64 +45,61 @@
 
         function initGraphics() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x020208);
-            scene.fog = new THREE.FogExp2(0x020208, 0.05); // Brouillard urbain
+            scene.background = new THREE.Color(0x87CEEB); // BLEU CIEL
+            scene.fog = new THREE.Fog(0x87CEEB, 1, 100);
 
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 1.6, 5);
+            camera.position.set(0, 1.6, 10);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.toneMapping = THREE.ReinhardToneMapping; // Améliore les lumières
+            renderer.setPixelRatio(window.devicePixelRatio);
             document.body.appendChild(renderer.domElement);
 
-            // LUMIÈRES
-            scene.add(new THREE.AmbientLight(0x101020, 0.5));
-            const pLight = new THREE.PointLight(0x00f2ff, 1, 15);
-            camera.add(pLight);
-            scene.add(camera);
+            // LUMIÈRES DE JOUR
+            const ambient = new THREE.AmbientLight(0xffffff, 0.6); // Lumière globale
+            scene.add(ambient);
 
-            // CONSTRUCTION DU QUARTIER
+            const sun = new THREE.DirectionalLight(0xffffff, 0.8); // Le Soleil
+            sun.position.set(5, 10, 7);
+            scene.add(sun);
+
+            // MAP DU QUARTIER
             const map = [
-                [1,1,1,1,1,1,1,1,1,1],
-                [1,0,0,0,0,0,0,0,0,1],
-                [1,0,1,0,1,1,0,1,0,1],
-                [1,0,0,0,0,0,0,0,0,1],
-                [1,1,1,1,1,1,1,1,1,1]
+                [1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,0,1,1,0,0,1,0,0,1,1,0,1],
+                [1,0,0,0,0,0,1,0,0,0,0,0,1],
+                [1,0,1,0,0,0,0,0,0,0,1,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1]
             ];
 
-            const bGeo = new THREE.BoxGeometry(4, 15, 4);
+            const bGeo = new THREE.BoxGeometry(4, 10, 4);
             
             map.forEach((row, z) => {
                 row.forEach((cell, x) => {
                     if(cell === 1) {
-                        // Look bâtiment : sombre avec fenêtres émissives
-                        const bMat = new THREE.MeshStandardMaterial({ 
-                            color: 0x050505, 
-                            emissive: 0x00f2ff, 
-                            emissiveIntensity: Math.random() * 0.2 // Effet fenêtres aléatoires
-                        });
+                        const bMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
                         const b = new THREE.Mesh(bGeo, bMat);
-                        b.position.set((x-5)*6, 7.5, (z-2)*10);
+                        b.position.set((x-6)*5, 5, (z-3)*8);
                         scene.add(b);
                         buildingBoxes.push(new THREE.Box3().setFromObject(b));
-                        
-                        // Ajout de "Néons" sur les bords des immeubles
-                        if(Math.random() > 0.5) {
-                            const nGeo = new THREE.BoxGeometry(0.1, 15, 0.1);
-                            const nMat = new THREE.MeshBasicMaterial({ color: 0xff00ff });
-                            const neon = new THREE.Mesh(nGeo, nMat);
-                            neon.position.set(b.position.x + 2.1, 7.5, b.position.z + 2.1);
-                            scene.add(neon);
-                        }
+
+                        // Petit toit coloré pour faire "maison"
+                        const roofGeo = new THREE.BoxGeometry(4.2, 0.5, 4.2);
+                        const roofMat = new THREE.MeshLambertMaterial({ color: Math.random() * 0xffffff });
+                        const roof = new THREE.Mesh(roofGeo, roofMat);
+                        roof.position.set(b.position.x, 10, b.position.z);
+                        scene.add(roof);
                     }
                 });
             });
 
-            // SOL RÉFLÉCHISSANT
+            // SOL (Herbe/Tarmac)
             const floor = new THREE.Mesh(
                 new THREE.PlaneGeometry(200, 200),
-                new THREE.MeshStandardMaterial({ color: 0x020202, roughness: 0.1, metalness: 0.5 })
+                new THREE.MeshLambertMaterial({ color: 0x7cfc00 }) // VERT HERBE
             );
             floor.rotation.x = -Math.PI/2;
             scene.add(floor);
@@ -119,7 +117,7 @@
                     if(!playerMeshes[p.id]) {
                         playerMeshes[p.id] = new THREE.Mesh(
                             new THREE.CapsuleGeometry(0.4, 1), 
-                            new THREE.MeshBasicMaterial({ color: 0xff00ff })
+                            new THREE.MeshLambertMaterial({ color: 0xff4444 })
                         );
                         scene.add(playerMeshes[p.id]);
                     }
@@ -127,7 +125,7 @@
                 }
             });
             socket.on('playerKilled', (id) => {
-                if(id === socket.id) { alert("Game Over"); location.reload(); }
+                if(id === socket.id) { alert("Tu as été éliminé !"); location.reload(); }
                 if(playerMeshes[id]) { scene.remove(playerMeshes[id]); delete playerMeshes[id]; }
             });
         }
@@ -139,32 +137,8 @@
 
             if(isReady && document.pointerLockElement) {
                 const oldPos = camera.position.clone();
-                const speed = 8 * delta;
+                const speed = 9 * delta;
 
                 if(keys['KeyW']) camera.translateZ(-speed);
                 if(keys['KeyS']) camera.translateZ(speed);
-                if(keys['KeyA']) camera.translateX(-speed);
-                if(keys['KeyD']) camera.translateX(speed);
-
-                camera.position.y = 1.6;
-                const pBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(0.8, 1, 0.8));
-                for(let b of buildingBoxes) {
-                    if(pBox.intersectsBox(b)) { camera.position.copy(oldPos); break; }
-                }
-                socket.emit('playerMovement', { x: camera.position.x, z: camera.position.z, ry: camera.rotation.y });
-            }
-            renderer.render(scene, camera);
-            prevTime = time;
-        }
-
-        document.addEventListener('mousemove', (e) => { if(document.pointerLockElement) camera.rotation.y -= e.movementX * 0.002; });
-        window.addEventListener('keydown', (e) => keys[e.code] = true);
-        window.addEventListener('keyup', (e) => keys[e.code] = false);
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-    </script>
-</body>
-</html>
+                if(keys['
