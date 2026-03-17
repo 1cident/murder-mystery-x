@@ -2,29 +2,29 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Murder Mystery 3D - Corrigé</title>
+    <title>Murder Mystery 3D - Final Fix</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
         #hud { position: absolute; top: 15px; left: 15px; color: #00d4ff; z-index: 10; font-size: 1.5em; font-weight: bold; text-shadow: 2px 2px #000; pointer-events: none; }
         #instructions { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.95); color: white; z-index: 100; text-align: center; }
-        #menu-box { background: #111; padding: 40px; border: 2px solid #00d4ff; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 212, 255, 0.2); }
+        #menu-box { background: #111; padding: 40px; border: 2px solid #00d4ff; border-radius: 10px; }
         input { padding: 12px; margin: 15px 0; font-size: 1.1em; background: #000; color: #fff; border: 1px solid #00d4ff; text-align: center; width: 200px; }
-        button { padding: 15px 40px; font-size: 1.1em; cursor: pointer; background: #00d4ff; border: none; font-weight: bold; color: #000; transition: 0.3s; }
-        button:hover { background: #fff; transform: scale(1.05); }
-        canvas { display: block; }
+        button { padding: 15px 40px; font-size: 1.1em; cursor: pointer; background: #00d4ff; border: none; font-weight: bold; color: #000; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); z-index: 5; pointer-events: none; }
     </style>
 </head>
 <body>
 
 <div id="hud">Rôle : Non connecté</div>
+<div id="crosshair"></div>
 
 <div id="instructions">
     <div id="menu-box">
-        <h1 style="color: #00d4ff; margin-top: 0;">MURDER MYSTERY 3D</h1>
+        <h1 style="color: #00d4ff;">MURDER MYSTERY 3D</h1>
         <input type="text" id="nickname" placeholder="Ton Pseudo..." maxlength="12">
         <br>
         <button id="joinBtn">REJOINDRE LA PARTIE</button>
-        <p style="color: #666; font-size: 0.9em; margin-top: 20px;">ZQSD pour bouger | Souris pour regarder | Espace pour attaquer</p>
+        <p style="color: #666; font-size: 0.9em; margin-top: 20px;">ZQSD pour bouger | Clic GAUCHE pour attaquer/tirer</p>
     </div>
 </div>
 
@@ -32,7 +32,111 @@
 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
 <script>
-    // --- CONFIGURATION ---
+    // --- CONNEXION ---
     const socket = io("https://murder-mystery-x.onrender.com");
+    
     let scene, camera, renderer, players = {}, playerMeshes = {};
-    let is
+    let isReady = false;
+    let prevTime = performance.now();
+    const keys = {};
+    const wallBoxes = [];
+
+    // --- LOGIQUE D'ENTRÉE (BOUTON) ---
+    const joinBtn = document.getElementById('joinBtn');
+    joinBtn.addEventListener('click', function() {
+        const nick = document.getElementById('nickname').value.trim();
+        if(nick !== "") {
+            console.log("BOUTON CLIQUÉ - Pseudo:", nick);
+            socket.emit('joinGame', nick);
+            document.body.requestPointerLock();
+            document.getElementById('instructions').style.display = 'none';
+            isReady = true;
+        } else {
+            alert("Veuillez entrer un pseudo !");
+        }
+    });
+
+    // --- MAP ---
+    const map = [
+        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+        [1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+        [1,0,1,1,0,1,0,1,1,1,1,1,1,1,0,1,1,1,0,1],
+        [1,0,1,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,1],
+        [1,0,1,0,1,1,1,1,1,1,0,1,0,1,1,1,0,1,0,1],
+        [1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,1,0,1],
+        [1,1,1,0,1,0,1,1,0,1,1,1,1,1,1,1,0,1,0,1],
+        [1,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,1,0,1],
+        [1,0,1,1,1,1,1,0,1,1,1,1,0,1,0,1,1,1,0,1],
+        [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+    ];
+
+    function init() {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x020205);
+        
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(2, 1.6, 2);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const hemiLight = new THREE.HemisphereLight(0x00d4ff, 0x000000, 0.8);
+        scene.add(hemiLight);
+
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshPhongMaterial({ color: 0x050505 }));
+        floor.rotation.x = -Math.PI / 2;
+        scene.add(floor);
+
+        const wallGeo = new THREE.BoxGeometry(2, 4, 2);
+        const wallMat = new THREE.MeshPhongMaterial({ color: 0x001a33, specular: 0x00d4ff });
+
+        map.forEach((row, z) => {
+            row.forEach((cell, x) => {
+                if(cell === 1) {
+                    const wall = new THREE.Mesh(wallGeo, wallMat);
+                    wall.position.set(x * 2, 2, z * 2);
+                    scene.add(wall);
+                    wallBoxes.push(new THREE.Box3().setFromObject(wall));
+                }
+            });
+        });
+
+        animate();
+    }
+
+    // --- INTERACTIONS ---
+    document.addEventListener('mousemove', (e) => {
+        if(document.pointerLockElement) camera.rotation.y -= e.movementX * 0.003;
+    });
+
+    // ACTION AU CLIC GAUCHE
+    document.addEventListener('mousedown', (e) => {
+        if (isReady && document.pointerLockElement && e.button === 0) {
+            console.log("ACTION CLIC GAUCHE");
+            socket.emit('attack');
+        }
+    });
+
+    window.addEventListener('keydown', (e) => { keys[e.code] = true; });
+    window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+    // --- RÉSEAU ---
+    socket.on('currentPlayers', (p) => { 
+        players = p; 
+        if(players[socket.id]) document.getElementById('hud').innerText = "Rôle : " + players[socket.id].role;
+    });
+
+    socket.on('playerMoved', (p) => {
+        players[p.id] = p;
+        if(p.id !== socket.id && p.alive) {
+            if(!playerMeshes[p.id]) {
+                playerMeshes[p.id] = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1), new THREE.MeshPhongMaterial({color: 0xff4d4d}));
+                scene.add(playerMeshes[p.id]);
+            }
+            playerMeshes[p.id].position.set(p.x, 1, p.z);
+        }
+    });
+
+    socket
