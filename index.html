@@ -113,7 +113,27 @@
                 socket.emit('joinGame', "Joueur-" + Math.floor(Math.random()*99));
                 
                 socket.on('currentPlayers', (p) => {
-                    players = p;
+    players = p;
+
+    for (let id in players) {
+        if (!playerMeshes[id]) {
+            const geometry = new THREE.BoxGeometry(1, 2, 1);
+            const material = new THREE.MeshLambertMaterial({
+                color: id === socket.id ? 0x00ff00 : 0xff0000
+            });
+
+            const mesh = new THREE.Mesh(geometry, material);
+            scene.add(mesh);
+            playerMeshes[id] = mesh;
+            socket.on('playerMoved', (data) => {
+    const mesh = playerMeshes[data.id];
+    if (mesh) {
+        mesh.position.set(data.x, 1, data.z);
+        mesh.rotation.y = data.ry;
+    }
+        }
+    }
+});
                     const me = players[socket.id];
                     if(me) {
                         document.getElementById('hud').innerText = "Rôle : " + me.role.toUpperCase();
