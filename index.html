@@ -2,44 +2,24 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>MMX - VERSION PRO</title>
+    <title>MMX - MULTIJOUEUR FIX</title>
     <style>
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: 'Segoe UI', sans-serif; }
-        
-        /* HUD & INTERFACE */
         #hud { position: absolute; top: 20px; left: 20px; color: #111; font-size: 20px; font-weight: bold; background: rgba(255,255,255,0.8); padding: 10px; border-radius: 8px; z-index: 10; pointer-events: none; }
         #crosshair { position: absolute; top: 50%; left: 50%; width: 14px; height: 14px; border: 2px solid #000; border-radius: 50%; transform: translate(-50%, -50%); z-index: 5; pointer-events: none; }
-        
-        /* ARME EN BAS AU MILIEU */
-        #weapon-slot { 
-            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-            width: 80px; height: 80px; background: rgba(0,0,0,0.6); border: 3px solid #fff;
-            border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 40px;
-        }
-
-        #spectator-ui { 
-            position: absolute; top: 20px; width: 100%; text-align: center; 
-            color: white; font-size: 24px; font-weight: bold; text-shadow: 2px 2px 4px #000;
-            display: none; pointer-events: none;
-        }
-
-        #overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #87CEEB; z-index: 100; cursor: pointer; }
+        #weapon-slot { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 80px; height: 80px; background: rgba(0,0,0,0.6); border: 3px solid #fff; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 40px; z-index: 10; }
+        #spectator-ui { position: absolute; top: 20px; width: 100%; text-align: center; color: white; font-size: 24px; font-weight: bold; text-shadow: 2px 2px 4px #000; display: none; pointer-events: none; z-index: 11; }
+        #overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #87CEEB; z-index: 100; }
         #btn-play { padding: 25px 50px; font-size: 28px; font-weight: bold; color: white; background: #2ecc71; border: none; border-radius: 50px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <div id="hud">Rôle : Assignation...</div>
-    <div id="spectator-ui">MODE SPECTATEUR - Vous êtes mort</div>
+    <div id="hud">Rôle : Connexion...</div>
+    <div id="spectator-ui">MODE SPECTATEUR</div>
     <div id="crosshair"></div>
-    
-    <div id="weapon-slot" title="Votre Arme">
-        <span id="weapon-icon">❔</span>
-    </div>
-
-    <div id="overlay">
-        <button id="btn-play">DÉMARRER LA PARTIE</button>
-    </div>
+    <div id="weapon-slot"><span id="weapon-icon">✋</span></div>
+    <div id="overlay"><button id="btn-play">REJOINDRE LE QUARTIER</button></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
@@ -48,113 +28,104 @@
         let socket, scene, camera, renderer, isReady = false;
         let players = {}, playerMeshes = {}, houseBoxes = [];
         const keys = {};
-        
-        // Physique
-        let velocity = new THREE.Vector3();
-        let canJump = false;
-        let isSpectator = false;
-        let prevTime = performance.now();
+        let velocity = new THREE.Vector3(), canJump = false, isSpectator = false, prevTime = performance.now();
 
+        // 1. INITIALISATION RÉSEAU (AVANT TOUT)
+        function connectToServer() {
+            socket = io("https://murder-mystery-x.onrender.com", {
+                transports: ['websocket'],
+                upgrade: false
+            });
+
+            socket.on('connect', () => {
+                console.log("Connecté au serveur !");
+                socket.emit('joinGame', "Player_" + Math.floor(Math.random()*999));
+            });
+
+            socket.on('currentPlayers', (serverPlayers) => {
+                players = serverPlayers;
+                updateHUD();
+            });
+
+            socket.on('playerMoved', (p) => {
+                if(p.id === socket.id) return;
+                if(!playerMeshes[p.id] && p.alive) {
+                    const g = new THREE.CapsuleGeometry(0.5, 1.2);
+                    const m = new THREE.MeshLambertMaterial({ color: 0x4444ff });
+                    playerMeshes[p.id] = new THREE.Mesh(g, m);
+                    scene.add(playerMeshes[p.id]);
+                }
+                if(playerMeshes[p.id]) {
+                    playerMeshes[p.id].position.set(p.x, 1.1, p.z);
+                    playerMeshes[p.id].rotation.y = p.ry || 0;
+                }
+            });
+
+            socket.on('playerKilled', (id) => {
+                if(id === socket.id) {
+                    isSpectator = true;
+                    document.getElementById('spectator-ui').style.display = 'block';
+                    document.getElementById('weapon-slot').style.display = 'none';
+                }
+                if(playerMeshes[id]) { scene.remove(playerMeshes[id]); delete playerMeshes[id]; }
+            });
+        }
+
+        function updateHUD() {
+            const me = players[socket.id];
+            if(me) {
+                document.getElementById('hud').innerText = "Rôle : " + me.role.toUpperCase();
+                const icon = document.getElementById('weapon-icon');
+                if(me.role === 'murderer') icon.innerText = "🔪";
+                else if(me.role === 'sheriff') icon.innerText = "🔫";
+                else icon.innerText = "✋";
+            }
+        }
+
+        // 2. BOUTON JOUER
         document.getElementById('btn-play').addEventListener('click', () => {
             document.getElementById('overlay').style.display = 'none';
             document.body.requestPointerLock();
+            connectToServer();
+            initScene();
             isReady = true;
-            initGame();
         });
 
-        function initGame() {
+        function initScene() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x87CEEB);
-            scene.fog = new THREE.Fog(0x87CEEB, 20, 150);
-
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 1.6, 20);
+            camera.position.set(Math.random()*5, 1.6, 20);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+            const sun = new THREE.DirectionalLight(0xffffff, 0.4);
+            sun.position.set(10, 20, 10);
+            scene.add(sun);
 
-            // SOL
+            // Décor
             const grass = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), new THREE.MeshLambertMaterial({color: 0x567d46}));
-            grass.rotation.x = -Math.PI / 2;
-            scene.add(grass);
+            grass.rotation.x = -Math.PI/2; scene.add(grass);
 
-            // ROUTE
             const road = new THREE.Mesh(new THREE.PlaneGeometry(16, 300), new THREE.MeshLambertMaterial({color: 0x333333}));
-            road.rotation.x = -Math.PI / 2; road.position.y = 0.01;
-            scene.add(road);
+            road.rotation.x = -Math.PI/2; road.position.y = 0.01; scene.add(road);
 
-            // MAISONS
-            function createHouse(x, z) {
-                const house = new THREE.Group();
-                const body = new THREE.Mesh(new THREE.BoxGeometry(8, 7, 8), new THREE.MeshLambertMaterial({color: 0xffffff}));
-                body.position.y = 3.5;
-                house.add(body);
-                const roof = new THREE.Mesh(new THREE.ConeGeometry(7, 5, 4), new THREE.MeshLambertMaterial({color: 0xaa2222}));
-                roof.position.y = 9; roof.rotation.y = Math.PI / 4;
-                house.add(roof);
-                house.position.set(x, 0, z);
-                scene.add(house);
-
-                // Collision Box
-                const box = new THREE.Box3().setFromObject(body);
-                houseBoxes.push(box);
-            }
-
+            // Maisons avec collisions
             for(let i = -3; i <= 3; i++) {
-                if(i !== 0) { createHouse(-18, i * 25); createHouse(18, i * 25); }
+                if(i !== 0) {
+                    const house = new THREE.Group();
+                    const body = new THREE.Mesh(new THREE.BoxGeometry(8, 7, 8), new THREE.MeshLambertMaterial({color: 0xffffff}));
+                    body.position.y = 3.5; house.add(body);
+                    const roof = new THREE.Mesh(new THREE.ConeGeometry(7, 5, 4), new THREE.MeshLambertMaterial({color: 0xaa2222}));
+                    roof.position.y = 9; roof.rotation.y = Math.PI/4; house.add(roof);
+                    house.position.set(i < 0 ? -18 : 18, 0, Math.abs(i) * 25 - 25);
+                    scene.add(house);
+                    houseBoxes.push(new THREE.Box3().setFromObject(body));
+                }
             }
-
-            // RÉSEAU
-            try {
-                socket = io("https://murder-mystery-x.onrender.com");
-                socket.emit('joinGame', "Joueur-" + Math.floor(Math.random()*99));
-                
-                socket.on('currentPlayers', (p) => {
-    players = p;
-
-    for (let id in players) {
-        if (!playerMeshes[id]) {
-            const geometry = new THREE.BoxGeometry(1, 2, 1);
-            const material = new THREE.MeshLambertMaterial({
-                color: id === socket.id ? 0x00ff00 : 0xff0000
-            });
-
-            const mesh = new THREE.Mesh(geometry, material);
-            scene.add(mesh);
-            playerMeshes[id] = mesh;
-            socket.on('playerMoved', (data) => {
-    const mesh = playerMeshes[data.id];
-    if (mesh) {
-        mesh.position.set(data.x, 1, data.z);
-        mesh.rotation.y = data.ry;
-    }
-        }
-    }
-});
-                    const me = players[socket.id];
-                    if(me) {
-                        document.getElementById('hud').innerText = "Rôle : " + me.role.toUpperCase();
-                        // Mise à jour icône arme
-                        const icon = document.getElementById('weapon-icon');
-                        if(me.role === 'murderer') icon.innerText = "🔪";
-                        else if(me.role === 'sheriff') icon.innerText = "🔫";
-                        else icon.innerText = "✋";
-                    }
-                });
-
-                socket.on('playerKilled', (id) => {
-                    if(id === socket.id) {
-                        isSpectator = true;
-                        document.getElementById('spectator-ui').style.display = 'block';
-                        document.getElementById('weapon-slot').style.display = 'none';
-                    }
-                    if(playerMeshes[id]) { scene.remove(playerMeshes[id]); delete playerMeshes[id]; }
-                });
-            } catch(e) {}
-
             animate();
         }
 
@@ -164,9 +135,7 @@
             const delta = (time - prevTime) / 1000;
 
             if(isReady && document.pointerLockElement) {
-                const speed = isSpectator ? 20 : 12;
-                
-                // Mouvement de base
+                const speed = isSpectator ? 25 : 12;
                 const oldPos = camera.position.clone();
                 
                 if (keys['KeyW']) camera.translateZ(-speed * delta);
@@ -174,51 +143,35 @@
                 if (keys['KeyA']) camera.translateX(-speed * delta);
                 if (keys['KeyD']) camera.translateX(speed * delta);
 
-                // SAUT ET GRAVITÉ (Si pas spectateur)
                 if(!isSpectator) {
-                    velocity.y -= 30.0 * delta; // Gravité
+                    velocity.y -= 30.0 * delta; 
                     camera.position.y += velocity.y * delta;
+                    if (camera.position.y < 1.6) { velocity.y = 0; camera.position.y = 1.6; canJump = true; }
 
-                    if (camera.position.y < 1.6) {
-                        velocity.y = 0;
-                        camera.position.y = 1.6;
-                        canJump = true;
-                    }
-
-                    // COLLISIONS MAISONS
-                    const pBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(1.2, 2, 1.2));
+                    // Collision House
+                    const pBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(1.5, 2, 1.5));
                     for(let box of houseBoxes) {
-                        if(pBox.intersectsBox(box)) {
-                            camera.position.x = oldPos.x;
-                            camera.position.z = oldPos.z;
-                            break;
-                        }
+                        if(pBox.intersectsBox(box)) { camera.position.x = oldPos.x; camera.position.z = oldPos.z; break; }
                     }
+                    if(socket) socket.emit('playerMovement', { x: camera.position.x, z: camera.position.z, ry: camera.rotation.y });
                 } else {
-                    // Mode Spectateur : Vol libre
                     if(keys['Space']) camera.position.y += speed * delta;
                     if(keys['ShiftLeft']) camera.position.y -= speed * delta;
-                }
-
-                if(socket && !isSpectator) {
-                    socket.emit('playerMovement', { x: camera.position.x, z: camera.position.z, ry: camera.rotation.y });
                 }
             }
             if(renderer) renderer.render(scene, camera);
             prevTime = time;
         }
 
-        // ÉCOUTEURS
         window.addEventListener('keydown', (e) => {
             keys[e.code] = true;
-            if (e.code === 'Space' && canJump && !isSpectator) {
-                velocity.y += 12;
-                canJump = false;
-            }
+            if (e.code === 'Space' && canJump && !isSpectator) { velocity.y += 12; canJump = false; }
         });
         window.addEventListener('keyup', (e) => keys[e.code] = false);
         document.addEventListener('mousemove', (e) => { if(document.pointerLockElement) camera.rotation.y -= e.movementX * 0.002; });
-        document.addEventListener('mousedown', (e) => { if(isReady && socket && !isSpectator && e.button === 0) socket.emit('attack'); });
+        document.addEventListener('mousedown', (e) => { 
+            if(isReady && socket && !isSpectator && e.button === 0) socket.emit('attack'); 
+        });
     </script>
 </body>
 </html>
