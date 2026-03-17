@@ -2,15 +2,14 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Murder Mystery X - Maison Abandonnée Edition</title>
+    <title>Murder Mystery X - Fix Maison</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #87CEEB; font-family: 'Arial Rounded MT Bold', sans-serif; }
-        #hud { position: absolute; top: 20px; left: 20px; color: #333; font-size: 22px; font-weight: bold; background: white; padding: 12px 25px; border-radius: 15px; border: 4px solid #000; z-index: 10; display: none; }
-        #weapon-slot { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 100px; height: 100px; background: #222; border: 5px solid #fff; border-radius: 20px; display: none; align-items: center; justify-content: center; font-size: 50px; z-index: 10; }
+        body { margin: 0; overflow: hidden; background: #87CEEB; font-family: sans-serif; }
+        #hud { position: absolute; top: 20px; left: 20px; color: #333; font-size: 20px; font-weight: bold; background: white; padding: 10px; border-radius: 10px; border: 3px solid #000; z-index: 10; display: none; }
+        #weapon-slot { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 80px; height: 80px; background: #222; border: 4px solid #fff; border-radius: 15px; display: none; align-items: center; justify-content: center; font-size: 40px; z-index: 10; }
         #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #87CEEB; z-index: 1000; }
-        #btn-play { padding: 25px 80px; font-size: 40px; font-weight: bold; color: white; background: #ff4757; border: none; border-radius: 60px; cursor: pointer; box-shadow: 0 12px 0 #cc0000; transition: 0.1s; margin-bottom: 20px; }
-        #btn-play:active { transform: translateY(6px); box-shadow: 0 6px 0 #cc0000; }
-        #loading-text { color: white; font-size: 18px; font-weight: bold; }
+        #btn-play { padding: 20px 60px; font-size: 30px; font-weight: bold; color: white; background: #ff4757; border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 8px 0 #cc0000; }
+        #status { margin-top: 15px; color: white; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -20,7 +19,7 @@
     
     <div id="overlay">
         <button id="btn-play">JOUER</button>
-        <div id="loading-text">Chargement de la maison abandonnée...</div>
+        <div id="status">Chargement du modèle 3D...</div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -34,19 +33,18 @@
         const keys = {};
         let velocity = new THREE.Vector3(), canJump = false, prevTime = performance.now();
 
-        // --- CHARGEMENT DE TON MODÈLE ---
-        const loader = new THREE.GLTFLoader();
-        // Utilisation du nom exact avec l'espace encodé (%20)
-        const modelURL = './assets/Abandoned%20House.glb'; 
+        // --- CORRECTION DU LIEN ICI ---
+        // Comme ton fichier est à côté de index.html, on enlève "/assets"
+        const modelURL = './Abandoned%20House.glb'; 
 
+        const loader = new THREE.GLTFLoader();
         loader.load(modelURL, (gltf) => {
             playerModelTemplate = gltf.scene;
-            // On réduit la taille de la maison pour qu'elle ne soit pas géante sur les joueurs
             playerModelTemplate.scale.set(0.1, 0.1, 0.1); 
-            document.getElementById('loading-text').innerText = "Maison prête !";
-        }, undefined, (error) => {
-            console.error("Erreur de chargement. Vérifie le nom du fichier sur GitHub.");
-            document.getElementById('loading-text').innerText = "Erreur : Fichier non trouvé";
+            document.getElementById('status').innerText = "Modèle chargé avec succès !";
+        }, undefined, (err) => {
+            console.error("Erreur de lien");
+            document.getElementById('status').innerText = "Erreur : Fichier non trouvé au nom exact.";
         });
 
         document.getElementById('btn-play').addEventListener('click', () => {
@@ -61,38 +59,34 @@
             if (playerModelTemplate) {
                 return playerModelTemplate.clone();
             } else {
-                // Si le modèle n'est pas chargé, on met un cube rouge par défaut
-                return new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({color: 0xff0000}));
+                // Secours si la maison ne charge pas
+                const box = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({color: 0xff4757}));
+                box.position.y = 0.5;
+                return box;
             }
         }
 
         function initGame() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x87CEEB);
-            scene.fog = new THREE.Fog(0x87CEEB, 10, 150);
-
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 1.6, 10);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
             document.body.appendChild(renderer.domElement);
 
             scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-            const sun = new THREE.DirectionalLight(0xffffff, 0.6);
-            sun.position.set(20, 60, 20);
+            const sun = new THREE.DirectionalLight(0xffffff, 0.5);
+            sun.position.set(10, 50, 10);
             scene.add(sun);
 
-            // Sol
-            const grass = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshLambertMaterial({color: 0x7cfc00}));
+            // Sol de base
+            const grass = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), new THREE.MeshLambertMaterial({color: 0x7cfc00}));
             grass.rotation.x = -Math.PI/2; scene.add(grass);
 
-            const road = new THREE.Mesh(new THREE.PlaneGeometry(16, 600), new THREE.MeshLambertMaterial({color: 0x444444}));
-            road.rotation.x = -Math.PI/2; road.position.y = 0.01; scene.add(road);
-
-            // RÉSEAU
             socket = io("https://murder-mystery-x.onrender.com");
+            
             socket.on("currentPlayers", (ps) => {
                 players = ps;
                 const me = players[socket.id];
@@ -123,15 +117,13 @@
             const delta = (time - prevTime) / 1000;
 
             if(isReady && document.pointerLockElement) {
-                const oldPos = camera.position.clone();
                 const speed = 15 * delta;
-                
                 if(keys['KeyW']) camera.translateZ(-speed);
                 if(keys['KeyS']) camera.translateZ(speed);
                 if(keys['KeyA']) camera.translateX(-speed);
                 if(keys['KeyD']) camera.translateX(speed);
 
-                velocity.y -= 35 * delta;
+                velocity.y -= 30 * delta;
                 camera.position.y += velocity.y * delta;
                 if(camera.position.y < 1.6) { camera.position.y = 1.6; velocity.y = 0; canJump = true; }
                 
@@ -141,10 +133,9 @@
             prevTime = time;
         }
 
-        window.addEventListener('keydown', (e) => { keys[e.code] = true; if(e.code === 'Space' && canJump) { velocity.y = 13; canJump = false; } });
+        window.addEventListener('keydown', (e) => { keys[e.code] = true; if(e.code === 'Space' && canJump) { velocity.y = 12; canJump = false; } });
         window.addEventListener('keyup', (e) => keys[e.code] = false);
         document.addEventListener('mousemove', (e) => { if(document.pointerLockElement) camera.rotation.y -= e.movementX * 0.002; });
-        document.addEventListener('mousedown', () => { if(isReady) socket.emit('attack'); });
     </script>
 </body>
 </html>
