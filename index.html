@@ -2,21 +2,23 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Murder Mystery X - Fix Final</title>
+    <title>Murder Mystery X - 3D Ready</title>
     <style>
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: sans-serif; }
-        #hud { position: absolute; top: 20px; left: 20px; color: #333; font-size: 20px; font-weight: bold; background: white; padding: 10px; border-radius: 10px; border: 3px solid #000; z-index: 10; display: none; }
-        #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #87CEEB; z-index: 1000; }
-        #btn-play { padding: 20px 60px; font-size: 30px; font-weight: bold; color: white; background: #ff4757; border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 8px 0 #cc0000; }
-        #status { margin-top: 15px; color: white; font-weight: bold; }
+        #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(135, 206, 235, 0.9); z-index: 1000; }
+        #btn-play { padding: 20px 60px; font-size: 30px; font-weight: bold; color: white; background: #ff4757; border: none; border-radius: 50px; cursor: pointer; display: none; }
+        #loader-container { width: 300px; height: 20px; background: #eee; border-radius: 10px; overflow: hidden; margin-top: 20px; }
+        #loader-bar { width: 0%; height: 100%; background: #2ed573; transition: width 0.3s; }
+        #status { margin-top: 15px; color: white; font-weight: bold; text-shadow: 1px 1px 2px black; }
     </style>
 </head>
 <body>
 
-    <div id="hud">Rôle : Assignation...</div>
     <div id="overlay">
+        <h1 style="color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">MURDER MYSTERY X</h1>
+        <div id="loader-container"><div id="loader-bar"></div></div>
+        <div id="status">Téléchargement du modèle (22 MB)...</div>
         <button id="btn-play">JOUER</button>
-        <div id="status">En attente d'un vrai fichier maison.glb...</div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -24,58 +26,70 @@
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
     <script>
-        let socket, scene, camera, renderer, isReady = false;
-        let playerModelTemplate = null;
-        let playerMeshes = {};
+        let scene, camera, renderer, socket, isReady = false;
+        let playerModel = null;
+        let otherPlayers = {};
 
-        // On cherche le fichier au même endroit que l'index.html
-        const modelURL = './maison.glb'; 
-
+        // --- CHARGEMENT DU MODÈLE ---
         const loader = new THREE.GLTFLoader();
-        loader.load(modelURL, (gltf) => {
-            playerModelTemplate = gltf.scene;
-            playerModelTemplate.scale.set(0.1, 0.1, 0.1); 
-            document.getElementById('status').innerText = "Modèle 3D prêt !";
-        }, undefined, (err) => {
-            document.getElementById('status').innerText = "Erreur : Le fichier maison.glb est vide ou illisible.";
-        });
+        loader.load('./maison.glb', 
+            (gltf) => {
+                playerModel = gltf.scene;
+                // Ajustement de la taille : 22MB peut être énorme ou minuscule selon l'export
+                playerModel.scale.set(0.1, 0.1, 0.1); 
+                
+                document.getElementById('loader-container').style.display = 'none';
+                document.getElementById('status').innerText = "✅ Chargement terminé !";
+                document.getElementById('btn-play').style.display = 'block';
+            },
+            (xhr) => {
+                const percent = (xhr.loaded / xhr.total) * 100;
+                document.getElementById('loader-bar').style.set('width', percent + '%');
+                document.getElementById('status').innerText = "Téléchargement : " + Math.round(percent) + "%";
+            },
+            (err) => {
+                document.getElementById('status').innerText = "❌ Erreur de chargement du fichier maison.glb";
+            }
+        );
 
         document.getElementById('btn-play').addEventListener('click', () => {
-            document.body.requestPointerLock();
             document.getElementById('overlay').style.display = 'none';
-            document.getElementById('hud').style.display = 'block';
-            if(!isReady) { initGame(); isReady = true; }
+            init();
+            isReady = true;
         });
 
-        function initGame() {
+        function init() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x87CEEB);
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 5, 15);
+            camera.position.set(0, 10, 20); // Vue un peu plus haute pour voir les maisons
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            scene.add(new THREE.AmbientLight(0xffffff, 1));
+            scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+            const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+            sun.position.set(10, 20, 10);
+            scene.add(sun);
             
-            const grass = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshLambertMaterial({color: 0x7cfc00}));
-            grass.rotation.x = -Math.PI/2;
-            scene.add(grass);
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshLambertMaterial({color: 0x7cfc00}));
+            floor.rotation.x = -Math.PI / 2;
+            scene.add(floor);
 
             socket = io("https://murder-mystery-x.onrender.com");
-            
-            socket.on("playerMoved", (p) => {
-                if(p.id === socket.id) return;
-                if(!playerMeshes[p.id]) {
-                    if(playerModelTemplate) {
-                        playerMeshes[p.id] = playerModelTemplate.clone();
+
+            socket.on("playerMoved", (data) => {
+                if(data.id === socket.id) return;
+                if(!otherPlayers[data.id]) {
+                    if(playerModel) {
+                        otherPlayers[data.id] = playerModel.clone();
                     } else {
-                        playerMeshes[p.id] = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({color: 0xff0000}));
+                        otherPlayers[data.id] = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshLambertMaterial({color: 0xff4757}));
                     }
-                    scene.add(playerMeshes[p.id]);
+                    scene.add(otherPlayers[data.id]);
                 }
-                playerMeshes[p.id].position.set(p.x, 0, p.z);
+                otherPlayers[data.id].position.set(data.x, 0, data.z);
             });
 
             animate();
@@ -83,8 +97,19 @@
 
         function animate() {
             requestAnimationFrame(animate);
-            if(renderer) renderer.render(scene, camera);
+            if(isReady) {
+                // Déplacements simples pour tester
+                const speed = 0.2;
+                if(window.keys?.['KeyW']) camera.position.z -= speed;
+                if(window.keys?.['KeyS']) camera.position.z += speed;
+                socket.emit('playerMovement', { x: camera.position.x, z: camera.position.z });
+            }
+            renderer.render(scene, camera);
         }
+
+        window.keys = {};
+        window.addEventListener('keydown', (e) => keys[e.code] = true);
+        window.addEventListener('keyup', (e) => keys[e.code] = false);
     </script>
 </body>
 </html>
