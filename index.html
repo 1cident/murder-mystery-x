@@ -1,28 +1,74 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    </head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MURDER MYSTERY 3D - MEGA UPDATE</title>
+    <style>
+        /* STYLE DU JEU */
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        #hud { 
+            position: absolute; top: 20px; left: 20px; z-index: 10; 
+            color: #00d4ff; font-size: 1.8em; font-weight: bold; 
+            text-shadow: 3px 3px 0px #000; pointer-events: none; 
+        }
+
+        #crosshair { 
+            position: absolute; top: 50%; left: 50%; width: 12px; height: 12px; 
+            border: 2px solid rgba(255,255,255,0.8); border-radius: 50%; 
+            transform: translate(-50%, -50%); z-index: 5; pointer-events: none; 
+        }
+
+        /* MENU DE DÉPART */
+        #instructions { 
+            position: absolute; inset: 0; display: flex; flex-direction: column; 
+            align-items: center; justify-content: center; 
+            background: radial-gradient(circle, #111 0%, #000 100%); 
+            color: white; z-index: 100; text-align: center; 
+        }
+
+        #menu-box { 
+            background: rgba(20, 20, 20, 0.9); padding: 50px; 
+            border: 3px solid #00d4ff; border-radius: 20px;
+            box-shadow: 0 0 30px rgba(0, 212, 255, 0.4);
+        }
+
+        h1 { font-size: 3em; margin-bottom: 10px; color: #00d4ff; letter-spacing: 5px; }
+
+        input { 
+            padding: 15px; margin: 20px 0; font-size: 1.2em; border-radius: 5px;
+            background: #000; color: #fff; border: 2px solid #00d4ff; 
+            text-align: center; width: 250px; outline: none;
+        }
+
+        button { 
+            padding: 15px 50px; font-size: 1.3em; cursor: pointer; 
+            background: #00d4ff; border: none; font-weight: bold; 
+            color: #000; border-radius: 5px; transition: 0.3s;
+        }
+
+        button:hover { background: #fff; transform: scale(1.1); box-shadow: 0 0 20px #fff; }
+
+        #status-msg { margin-top: 15px; color: #666; font-style: italic; }
+    </style>
+</head>
 <body>
 
-    <div id="hud">Rôle : Non connecté</div>
+    <div id="hud">Rôle : En attente...</div>
     <div id="crosshair"></div>
 
     <div id="instructions">
         <div id="menu-box">
-            <h1 style="color: #00d4ff;">MURDER MYSTERY 3D</h1>
-            <input type="text" id="nickname" placeholder="Ton Pseudo..." maxlength="12">
+            <h1>MURDER MYSTERY X</h1>
+            <input type="text" id="nickname" placeholder="TON PSEUDO..." maxlength="12">
             <br>
             <button id="joinBtn">REJOINDRE LA PARTIE</button>
-            <p style="color: #666; font-size: 0.9em; margin-top: 20px;">ZQSD pour bouger | Clic GAUCHE pour attaquer/tirer</p>
+            <div id="status-msg">Vérification de la connexion...</div>
+            <p style="color: #aaa; margin-top: 30px; font-size: 0.9em;">
+                [Z S Q D] - Bouger | [SOURIS] - Regarder | [CLIC GAUCHE] - Action
+            </p>
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-
-    <script>
-        // COPIE ET COLLE LE CODE ICI (De "const socket = io..." jusqu'à la fin)
-    </script>
-
-</body>
-</html>
+    <script src="
