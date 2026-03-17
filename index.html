@@ -3,29 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MURDER MYSTERY X - ACCÈS DIRECT</title>
+    <title>MURDER MYSTERY X - EXTÉRIEUR</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+        body { margin: 0; overflow: hidden; background: #010103; font-family: 'Segoe UI', sans-serif; }
         #hud { 
             position: absolute; top: 20px; left: 20px; z-index: 10; 
             color: #00d4ff; font-size: 1.8em; font-weight: bold; 
-            text-shadow: 2px 2px 0px #000; pointer-events: none; 
+            text-shadow: 2px 2px 4px #000; pointer-events: none; 
         }
         #crosshair { 
-            position: absolute; top: 50%; left: 50%; width: 12px; height: 12px; 
-            border: 2px solid white; border-radius: 50%; 
+            position: absolute; top: 50%; left: 50%; width: 14px; height: 14px; 
+            border: 2px solid rgba(255,255,255,0.5); border-radius: 50%; 
             transform: translate(-50%, -50%); z-index: 5; pointer-events: none; 
         }
         #loading-screen {
             position: absolute; inset: 0; display: flex; align-items: center; 
             justify-content: center; background: #000; color: #00d4ff; 
-            z-index: 100; font-size: 2em; font-weight: bold;
+            z-index: 100; font-size: 1.5em; letter-spacing: 2px;
         }
     </style>
 </head>
 <body>
 
-    <div id="loading-screen">CHARGEMENT DU MONDE...</div>
+    <div id="loading-screen">INITIALISATION DE LA ZONE...</div>
     <div id="hud">Rôle : Assignation...</div>
     <div id="crosshair"></div>
 
@@ -33,95 +33,87 @@
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
     <script>
-        // --- VARIABLES GLOBALES ---
-        let socket;
-        let scene, camera, renderer, isReady = false;
+        let socket, scene, camera, renderer, isReady = false;
         let players = {}, playerMeshes = {}, wallBoxes = [];
         const keys = {};
         let prevTime = performance.now();
 
-        // --- 1. LANCEMENT AUTOMATIQUE ---
+        // --- 1. LANCEMENT ---
         window.onload = function() {
-            console.log("Lancement direct...");
-            
-            // Génération d'un pseudo aléatoire pour éviter les conflits
-            const autoNick = "Player-" + Math.floor(Math.random() * 999);
-
+            const autoNick = "User-" + Math.floor(Math.random() * 9999);
             try {
                 socket = io("https://murder-mystery-x.onrender.com");
                 setupSocketHandlers();
                 socket.emit('joinGame', autoNick);
-            } catch(e) { 
-                console.error("Erreur serveur:", e); 
-            }
+            } catch(e) { console.error(e); }
 
-            // Supprimer l'écran de chargement
             document.getElementById('loading-screen').style.display = 'none';
-            
-            // Note: Le PointerLock (capture souris) nécessite souvent un premier clic sur l'écran.
-            document.addEventListener('click', () => {
-                document.body.requestPointerLock();
-            });
+            document.addEventListener('click', () => { document.body.requestPointerLock(); });
 
             isReady = true;
             initGame();
         };
 
-        // --- 2. CONFIGURATION 3D ---
+        // --- 2. MONDE EXTÉRIEUR ---
         function initGame() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x020205);
-            scene.fog = new THREE.Fog(0x020205, 1, 25);
+            scene.background = new THREE.Color(0x010105);
+            scene.fog = new THREE.Fog(0x010105, 10, 40); // Brouillard lointain pour l'horizon
 
             camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-            camera.position.set(2, 1.6, 2);
+            camera.position.set(0, 1.6, 15); // Reculé pour voir la zone
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            scene.add(new THREE.AmbientLight(0xffffff, 0.3));
-            const light = new THREE.PointLight(0x00d4ff, 1, 15);
-            camera.add(light);
+            // Lumières : Ambiance "Lune" et point lumineux sur le joueur
+            scene.add(new THREE.AmbientLight(0x404050, 0.5));
+            const playerLight = new THREE.PointLight(0x00d4ff, 1, 20);
+            camera.add(playerLight);
             scene.add(camera);
 
-            // Grande Map
+            // --- CRÉATION DE LA MAP AÉRÉE ---
+            // 1 = Mur d'enceinte ou pilier, 0 = Espace libre
             const map = [
                 [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-                [1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-                [1,0,1,1,0,1,0,1,1,1,1,1,1,1,0,1,1,1,0,1],
-                [1,0,1,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,1],
-                [1,0,1,0,1,1,1,1,1,1,0,1,0,1,1,1,0,1,0,1],
-                [1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,1,0,1],
-                [1,1,1,0,1,0,1,1,0,1,1,1,1,1,1,1,0,1,0,1],
-                [1,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,1,0,1],
-                [1,0,1,1,1,1,1,0,1,1,1,1,0,1,0,1,1,1,0,1],
-                [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,0,0,1,0,0,0,0,1,0,0,1,0,0,0,0,1,0,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
                 [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
             ];
 
-            const wallGeo = new THREE.BoxGeometry(2, 4, 2);
-            const wallMat = new THREE.MeshPhongMaterial({ color: 0x001a33, specular: 0x00d4ff, shininess: 50 });
+            const wallGeo = new THREE.BoxGeometry(2, 5, 2);
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0x111122, roughness: 0.8 });
 
             map.forEach((row, z) => {
                 row.forEach((cell, x) => {
                     if (cell === 1) {
                         const wall = new THREE.Mesh(wallGeo, wallMat);
-                        wall.position.set(x*2, 2, z*2);
+                        // Centrage de la map : (x - largeur/2) * taille_bloc
+                        wall.position.set((x - 10) * 2.5, 2.5, (z - 5) * 2.5);
                         scene.add(wall);
                         wallBoxes.push(new THREE.Box3().setFromObject(wall));
                     }
                 });
             });
 
-            const floor = new THREE.Mesh(new THREE.PlaneGeometry(100,100), new THREE.MeshPhongMaterial({color:0x080808}));
-            floor.rotation.x = -Math.PI/2;
+            // Grand Sol Extérieur
+            const floorGeo = new THREE.PlaneGeometry(100, 100);
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 1 });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
             scene.add(floor);
 
             animate();
         }
 
-        // --- 3. LOGIQUE RÉSEAU ---
+        // --- 3. RÉSEAU ---
         function setupSocketHandlers() {
             socket.on('currentPlayers', (p) => { 
                 players = p; 
@@ -132,7 +124,9 @@
                 players[p.id] = p;
                 if(p.id !== socket.id && p.alive) {
                     if(!playerMeshes[p.id]) {
-                        playerMeshes[p.id] = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1), new THREE.MeshPhongMaterial({color:0xff0044}));
+                        const g = new THREE.CapsuleGeometry(0.5, 1, 4, 12);
+                        const m = new THREE.MeshStandardMaterial({ color: 0xff0044, emissive: 0x330000 });
+                        playerMeshes[p.id] = new THREE.Mesh(g, m);
                         scene.add(playerMeshes[p.id]);
                     }
                     playerMeshes[p.id].position.set(p.x, 1, p.z);
@@ -140,21 +134,18 @@
             });
 
             socket.on('playerKilled', (id) => {
-                if(id === socket.id) { alert("TU ES MORT !"); location.reload(); }
+                if(id === socket.id) { alert("ÉLIMINÉ !"); location.reload(); }
                 if(playerMeshes[id]) { scene.remove(playerMeshes[id]); delete playerMeshes[id]; }
             });
         }
 
-        // --- 4. BOUCLE DE RENDU ET CONTRÔLES ---
+        // --- 4. BOUCLE ---
         document.addEventListener('mousemove', (e) => {
-            if(document.pointerLockElement) camera.rotation.y -= e.movementX * 0.003;
+            if(document.pointerLockElement) camera.rotation.y -= e.movementX * 0.002;
         });
 
-        // CLIC GAUCHE POUR ATTAQUER
         document.addEventListener('mousedown', (e) => {
-            if(isReady && document.pointerLockElement && e.button === 0 && socket) {
-                socket.emit('attack');
-            }
+            if(isReady && document.pointerLockElement && e.button === 0 && socket) socket.emit('attack');
         });
 
         window.addEventListener('keydown', (e) => { keys[e.code] = true; });
@@ -167,7 +158,7 @@
 
             if (isReady && document.pointerLockElement) {
                 const oldPos = camera.position.clone();
-                const speed = 7.5 * delta;
+                const speed = 9 * delta; // Légèrement plus rapide car c'est ouvert
 
                 if (keys['KeyW']) camera.translateZ(-speed);
                 if (keys['KeyS']) camera.translateZ(speed);
@@ -176,7 +167,8 @@
 
                 camera.position.y = 1.6;
 
-                const pBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(0.7, 1, 0.7));
+                // Collision simplifiée (rayon de 0.8 autour du joueur)
+                const pBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(0.8, 1, 0.8));
                 for(let wall of wallBoxes) {
                     if(pBox.intersectsBox(wall)) { camera.position.copy(oldPos); break; }
                 }
@@ -188,11 +180,9 @@
         }
 
         window.addEventListener('resize', () => {
-            if(camera && renderer) {
-                camera.aspect = window.innerWidth/window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
-            }
+            camera.aspect = window.innerWidth/window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
         });
     </script>
 </body>
