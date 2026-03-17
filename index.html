@@ -3,37 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MURDER MYSTERY X - FIX FINAL</title>
+    <title>MURDER MYSTERY X - ACCÈS DIRECT</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
-        #hud { position: absolute; top: 20px; left: 20px; z-index: 10; color: #00d4ff; font-size: 1.8em; font-weight: bold; text-shadow: 2px 2px 0px #000; pointer-events: none; visibility: hidden; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 12px; height: 12px; border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); z-index: 5; pointer-events: none; display: none; }
-        
-        #instructions { 
-            position: absolute; inset: 0; display: flex; flex-direction: column; 
-            align-items: center; justify-content: center; background: #050505; color: white; z-index: 100; 
+        #hud { 
+            position: absolute; top: 20px; left: 20px; z-index: 10; 
+            color: #00d4ff; font-size: 1.8em; font-weight: bold; 
+            text-shadow: 2px 2px 0px #000; pointer-events: none; 
         }
-        #menu-box { background: #111; padding: 40px; border: 3px solid #00d4ff; border-radius: 15px; text-align: center; }
-        
-        input { padding: 15px; margin: 20px 0; font-size: 1.2em; border: 2px solid #00d4ff; background: #000; color: #fff; text-align: center; width: 220px; }
-        button { padding: 15px 50px; font-size: 1.3em; cursor: pointer; background: #00d4ff; border: none; font-weight: bold; color: #000; border-radius: 5px; }
-        button:active { transform: scale(0.95); }
+        #crosshair { 
+            position: absolute; top: 50%; left: 50%; width: 12px; height: 12px; 
+            border: 2px solid white; border-radius: 50%; 
+            transform: translate(-50%, -50%); z-index: 5; pointer-events: none; 
+        }
+        #loading-screen {
+            position: absolute; inset: 0; display: flex; align-items: center; 
+            justify-content: center; background: #000; color: #00d4ff; 
+            z-index: 100; font-size: 2em; font-weight: bold;
+        }
     </style>
 </head>
 <body>
 
+    <div id="loading-screen">CHARGEMENT DU MONDE...</div>
     <div id="hud">Rôle : Assignation...</div>
     <div id="crosshair"></div>
-
-    <div id="instructions">
-        <div id="menu-box">
-            <h1 style="color: #00d4ff; margin: 0;">MURDER MYSTERY X</h1>
-            <input type="text" id="nickname" placeholder="TON PSEUDO..." maxlength="12">
-            <br>
-            <button id="joinBtn">JOUER</button>
-            <p style="color: #555; margin-top: 20px; font-size: 0.8em;">ZQSD pour bouger | CLIC GAUCHE pour agir</p>
-        </div>
-    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
@@ -46,31 +40,29 @@
         const keys = {};
         let prevTime = performance.now();
 
-        // --- 1. GESTION DU BOUTON (ACTION IMMÉDIATE) ---
-        const joinBtn = document.getElementById('joinBtn');
-        
-        joinBtn.onclick = function() {
-            const nick = document.getElementById('nickname').value.trim();
-            if (nick === "") return alert("Choisis un pseudo !");
-
-            console.log("Démarrage du jeu...");
+        // --- 1. LANCEMENT AUTOMATIQUE ---
+        window.onload = function() {
+            console.log("Lancement direct...");
             
-            // Masquer le menu immédiatement
-            document.getElementById('instructions').style.display = 'none';
-            document.getElementById('crosshair').style.display = 'block';
-            document.getElementById('hud').style.visibility = 'visible';
-            
-            // Tenter de verrouiller la souris
-            document.body.requestPointerLock();
+            // Génération d'un pseudo aléatoire pour éviter les conflits
+            const autoNick = "Player-" + Math.floor(Math.random() * 999);
 
-            // Connexion Socket.io
             try {
                 socket = io("https://murder-mystery-x.onrender.com");
                 setupSocketHandlers();
-                socket.emit('joinGame', nick);
-            } catch(e) { console.error("Erreur serveur:", e); }
+                socket.emit('joinGame', autoNick);
+            } catch(e) { 
+                console.error("Erreur serveur:", e); 
+            }
 
-            // Lancer la 3D
+            // Supprimer l'écran de chargement
+            document.getElementById('loading-screen').style.display = 'none';
+            
+            // Note: Le PointerLock (capture souris) nécessite souvent un premier clic sur l'écran.
+            document.addEventListener('click', () => {
+                document.body.requestPointerLock();
+            });
+
             isReady = true;
             initGame();
         };
@@ -93,7 +85,7 @@
             camera.add(light);
             scene.add(camera);
 
-            // Map
+            // Grande Map
             const map = [
                 [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
                 [1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
@@ -101,4 +93,107 @@
                 [1,0,1,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,1],
                 [1,0,1,0,1,1,1,1,1,1,0,1,0,1,1,1,0,1,0,1],
                 [1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,1,0,1],
-                [1,1,1
+                [1,1,1,0,1,0,1,1,0,1,1,1,1,1,1,1,0,1,0,1],
+                [1,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,1,0,1],
+                [1,0,1,1,1,1,1,0,1,1,1,1,0,1,0,1,1,1,0,1],
+                [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ];
+
+            const wallGeo = new THREE.BoxGeometry(2, 4, 2);
+            const wallMat = new THREE.MeshPhongMaterial({ color: 0x001a33, specular: 0x00d4ff, shininess: 50 });
+
+            map.forEach((row, z) => {
+                row.forEach((cell, x) => {
+                    if (cell === 1) {
+                        const wall = new THREE.Mesh(wallGeo, wallMat);
+                        wall.position.set(x*2, 2, z*2);
+                        scene.add(wall);
+                        wallBoxes.push(new THREE.Box3().setFromObject(wall));
+                    }
+                });
+            });
+
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(100,100), new THREE.MeshPhongMaterial({color:0x080808}));
+            floor.rotation.x = -Math.PI/2;
+            scene.add(floor);
+
+            animate();
+        }
+
+        // --- 3. LOGIQUE RÉSEAU ---
+        function setupSocketHandlers() {
+            socket.on('currentPlayers', (p) => { 
+                players = p; 
+                if(players[socket.id]) document.getElementById('hud').innerText = "Rôle : " + players[socket.id].role.toUpperCase();
+            });
+
+            socket.on('playerMoved', (p) => {
+                players[p.id] = p;
+                if(p.id !== socket.id && p.alive) {
+                    if(!playerMeshes[p.id]) {
+                        playerMeshes[p.id] = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1), new THREE.MeshPhongMaterial({color:0xff0044}));
+                        scene.add(playerMeshes[p.id]);
+                    }
+                    playerMeshes[p.id].position.set(p.x, 1, p.z);
+                }
+            });
+
+            socket.on('playerKilled', (id) => {
+                if(id === socket.id) { alert("TU ES MORT !"); location.reload(); }
+                if(playerMeshes[id]) { scene.remove(playerMeshes[id]); delete playerMeshes[id]; }
+            });
+        }
+
+        // --- 4. BOUCLE DE RENDU ET CONTRÔLES ---
+        document.addEventListener('mousemove', (e) => {
+            if(document.pointerLockElement) camera.rotation.y -= e.movementX * 0.003;
+        });
+
+        // CLIC GAUCHE POUR ATTAQUER
+        document.addEventListener('mousedown', (e) => {
+            if(isReady && document.pointerLockElement && e.button === 0 && socket) {
+                socket.emit('attack');
+            }
+        });
+
+        window.addEventListener('keydown', (e) => { keys[e.code] = true; });
+        window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = performance.now();
+            const delta = Math.min((time - prevTime) / 1000, 0.1);
+
+            if (isReady && document.pointerLockElement) {
+                const oldPos = camera.position.clone();
+                const speed = 7.5 * delta;
+
+                if (keys['KeyW']) camera.translateZ(-speed);
+                if (keys['KeyS']) camera.translateZ(speed);
+                if (keys['KeyA']) camera.translateX(-speed);
+                if (keys['KeyD']) camera.translateX(speed);
+
+                camera.position.y = 1.6;
+
+                const pBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(0.7, 1, 0.7));
+                for(let wall of wallBoxes) {
+                    if(pBox.intersectsBox(wall)) { camera.position.copy(oldPos); break; }
+                }
+
+                if(socket) socket.emit('playerMovement', { x: camera.position.x, z: camera.position.z, ry: camera.rotation.y });
+            }
+            if(renderer) renderer.render(scene, camera);
+            prevTime = time;
+        }
+
+        window.addEventListener('resize', () => {
+            if(camera && renderer) {
+                camera.aspect = window.innerWidth/window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
+    </script>
+</body>
+</html>
