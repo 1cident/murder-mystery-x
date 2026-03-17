@@ -45,12 +45,25 @@
 
 <canvas id="gameCanvas"></canvas>
 
-<script src="/socket.io/socket.io.js" onerror="console.warn('Mode solo activé (pas de serveur détecté)')"></script>
+<script src="https://murder-mystery-x.onrender.com/socket.io/socket.io.js"></script>
 
 <script>
-    // --- INITIALISATION ---
+    // --- INITIALISATION SOCKET ---
+    // Connexion explicite à ton URL Render
     let socket;
-    try { socket = io(); } catch(e) {}
+    try { 
+        socket = io("https://murder-mystery-x.onrender.com"); 
+        
+        socket.on('connect', () => {
+            console.log("Connecté au serveur Render !");
+        });
+
+        socket.on('connect_error', () => {
+            console.warn("Le serveur Render démarre... (Plan gratuit)");
+        });
+    } catch(e) {
+        console.error("Erreur de connexion :", e);
+    }
 
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
@@ -90,7 +103,6 @@
         document.getElementById('game-ui').style.display = 'none';
         canvas.style.display = 'block';
         
-        // Ajuster la taille du canvas
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
         
@@ -102,26 +114,30 @@
     window.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; });
     window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
-    // --- BOUCLE DE JEU (Update + Draw) ---
+    // --- BOUCLE DE JEU ---
     function update() {
-        if (keys['z'] || keys['arrowup']) player.y -= player.speed;
-        if (keys['s'] || keys['arrowdown']) player.y += player.speed;
-        if (keys['q'] || keys['arrowleft']) player.x -= player.speed;
-        if (keys['d'] || keys['arrowright']) player.x += player.speed;
+        let moved = false;
+        if (keys['z'] || keys['arrowup']) { player.y -= player.speed; moved = true; }
+        if (keys['s'] || keys['arrowdown']) { player.y += player.speed; moved = true; }
+        if (keys['q'] || keys['arrowleft']) { player.x -= player.speed; moved = true; }
+        if (keys['d'] || keys['arrowright']) { player.x += player.speed; moved = true; }
 
         // Limites de l'écran
         if (player.x < 10) player.x = 10;
         if (player.y < 10) player.y = 10;
         if (player.x > canvas.width - 10) player.x = canvas.width - 10;
         if (player.y > canvas.height - 10) player.y = canvas.height - 10;
+
+        // Envoi de la position au serveur si on bouge et que le socket est prêt
+        if (moved && socket && socket.connected) {
+            socket.emit('playerMovement', { x: player.x, y: player.y });
+        }
     }
 
     function draw() {
-        // Fond sombre
         ctx.fillStyle = "#0a0a0a";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Dessin du quadrillage de fond (effet décoratif)
         ctx.strokeStyle = "#1a1a1a";
         ctx.lineWidth = 1;
         for(let x=0; x<canvas.width; x+=50) {
@@ -131,17 +147,15 @@
             ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width, y); ctx.stroke();
         }
 
-        // Dessin du joueur
         ctx.fillStyle = player.color;
         ctx.shadowBlur = 15;
         ctx.shadowColor = player.color;
         ctx.fillRect(player.x - player.size/2, player.y - player.size/2, player.size, player.size);
         ctx.shadowBlur = 0;
 
-        // Petit texte en haut
         ctx.fillStyle = "#d4af37";
         ctx.font = "16px Special Elite";
-        ctx.fillText("ZQSD pour bouger | Murder Mystery X (Pre-Alpha)", 20, 30);
+        ctx.fillText("ZQSD pour bouger | Serveur: " + (socket && socket.connected ? "En ligne" : "Connexion..."), 20, 30);
     }
 
     function gameLoop() {
@@ -151,12 +165,10 @@
         requestAnimationFrame(gameLoop);
     }
 
-    // Gérer le redimensionnement de la fenêtre
     window.addEventListener('resize', () => {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
     });
 </script>
-
 </body>
 </html>
