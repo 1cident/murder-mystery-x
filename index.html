@@ -2,19 +2,32 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>MMX - QUARTIER JOUR</title>
+    <title>MMX - JOURNÉE</title>
     <style>
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: sans-serif; }
-        #hud { position: absolute; top: 20px; left: 20px; color: #004466; font-size: 24px; font-weight: bold; text-shadow: 1px 1px 2px white; z-index: 10; pointer-events: none; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 14px; height: 14px; border: 2px solid #004466; border-radius: 50%; transform: translate(-50%, -50%); z-index: 5; pointer-events: none; }
-        #click-hint { position: absolute; bottom: 20px; width: 100%; text-align: center; color: #004466; font-weight: bold; background: rgba(255,255,255,0.5); padding: 5px 0; }
+        #hud { position: absolute; top: 20px; left: 20px; color: #004466; font-size: 24px; font-weight: bold; z-index: 10; pointer-events: none; display: none; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 14px; height: 14px; border: 2px solid #004466; border-radius: 50%; transform: translate(-50%, -50%); z-index: 5; pointer-events: none; display: none; }
+        
+        /* BOUTON GÉANT POUR ÊTRE SÛR */
+        #overlay { 
+            position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; 
+            background: rgba(135, 206, 235, 0.8); z-index: 100; cursor: pointer;
+        }
+        #btn-play { 
+            padding: 20px 40px; font-size: 30px; font-weight: bold; color: white; 
+            background: #004466; border: none; border-radius: 10px; cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
     </style>
 </head>
 <body>
 
     <div id="hud">Rôle : Assignation...</div>
     <div id="crosshair"></div>
-    <div id="click-hint">CLIQUE ICI POUR BOUGER ET JOUER</div>
+
+    <div id="overlay">
+        <button id="btn-play">CLIQUER POUR JOUER</button>
+    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
@@ -25,27 +38,27 @@
         const keys = {};
         let prevTime = performance.now();
 
-        window.onload = () => {
-            const nick = "Player-" + Math.floor(Math.random() * 999);
-            try {
-                socket = io("https://murder-mystery-x.onrender.com");
-                socket.on('connect', () => socket.emit('joinGame', nick));
-                setupNetwork();
-            } catch(e) { console.error(e); }
-            
-            initGraphics();
-            
-            // On force le démarrage au clic
-            document.addEventListener('mousedown', () => {
-                document.body.requestPointerLock();
-                document.getElementById('click-hint').style.display = 'none';
-                isReady = true;
-            });
-        };
+        // 1. GESTION DU CLIC (SÉPARÉE)
+        const overlay = document.getElementById('overlay');
+        const btnPlay = document.getElementById('btn-play');
 
+        btnPlay.addEventListener('click', () => {
+            console.log("Bouton cliqué !");
+            overlay.style.display = 'none';
+            document.getElementById('hud').style.display = 'block';
+            document.getElementById('crosshair').style.display = 'block';
+            
+            // On tente de capturer la souris
+            document.body.requestPointerLock();
+            
+            isReady = true;
+            if (!scene) initGraphics();
+        });
+
+        // 2. LE MONDE EN JOURNÉE
         function initGraphics() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB); // BLEU CIEL
+            scene.background = new THREE.Color(0x87CEEB);
             scene.fog = new THREE.Fog(0x87CEEB, 1, 100);
 
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -53,81 +66,53 @@
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
             document.body.appendChild(renderer.domElement);
 
-            // LUMIÈRES DE JOUR
-            const ambient = new THREE.AmbientLight(0xffffff, 0.6); // Lumière globale
-            scene.add(ambient);
-
-            const sun = new THREE.DirectionalLight(0xffffff, 0.8); // Le Soleil
+            scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+            const sun = new THREE.DirectionalLight(0xffffff, 0.8);
             sun.position.set(5, 10, 7);
             scene.add(sun);
 
-            // MAP DU QUARTIER
-            const map = [
-                [1,1,1,1,1,1,1,1,1,1,1,1,1],
-                [1,0,0,0,0,0,0,0,0,0,0,0,1],
-                [1,0,1,1,0,0,1,0,0,1,1,0,1],
-                [1,0,0,0,0,0,1,0,0,0,0,0,1],
-                [1,0,1,0,0,0,0,0,0,0,1,0,1],
-                [1,0,0,0,0,0,0,0,0,0,0,0,1],
-                [1,1,1,1,1,1,1,1,1,1,1,1,1]
-            ];
-
+            // Création quartier simple
             const bGeo = new THREE.BoxGeometry(4, 10, 4);
-            
-            map.forEach((row, z) => {
-                row.forEach((cell, x) => {
-                    if(cell === 1) {
-                        const bMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
-                        const b = new THREE.Mesh(bGeo, bMat);
-                        b.position.set((x-6)*5, 5, (z-3)*8);
-                        scene.add(b);
-                        buildingBoxes.push(new THREE.Box3().setFromObject(b));
+            const bMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
 
-                        // Petit toit coloré pour faire "maison"
-                        const roofGeo = new THREE.BoxGeometry(4.2, 0.5, 4.2);
-                        const roofMat = new THREE.MeshLambertMaterial({ color: Math.random() * 0xffffff });
-                        const roof = new THREE.Mesh(roofGeo, roofMat);
-                        roof.position.set(b.position.x, 10, b.position.z);
-                        scene.add(roof);
-                    }
-                });
-            });
+            for(let i=0; i<5; i++) {
+                const b = new THREE.Mesh(bGeo, bMat);
+                b.position.set(i*6 - 12, 5, -10);
+                scene.add(b);
+                buildingBoxes.push(new THREE.Box3().setFromObject(b));
+            }
 
-            // SOL (Herbe/Tarmac)
             const floor = new THREE.Mesh(
                 new THREE.PlaneGeometry(200, 200),
-                new THREE.MeshLambertMaterial({ color: 0x7cfc00 }) // VERT HERBE
+                new THREE.MeshLambertMaterial({ color: 0x7cfc00 })
             );
             floor.rotation.x = -Math.PI/2;
             scene.add(floor);
 
-            animate();
-        }
+            // Connexion réseau
+            try {
+                socket = io("https://murder-mystery-x.onrender.com");
+                socket.emit('joinGame', "Player-" + Math.floor(Math.random()*99));
+                
+                socket.on('currentPlayers', (p) => {
+                    players = p;
+                    if(players[socket.id]) document.getElementById('hud').innerText = "Rôle : " + players[socket.id].role.toUpperCase();
+                });
 
-        function setupNetwork() {
-            socket.on('currentPlayers', (p) => {
-                players = p;
-                if(players[socket.id]) document.getElementById('hud').innerText = "Rôle : " + players[socket.id].role.toUpperCase();
-            });
-            socket.on('playerMoved', (p) => {
-                if(p.id !== socket.id && p.alive) {
-                    if(!playerMeshes[p.id]) {
-                        playerMeshes[p.id] = new THREE.Mesh(
-                            new THREE.CapsuleGeometry(0.4, 1), 
-                            new THREE.MeshLambertMaterial({ color: 0xff4444 })
-                        );
-                        scene.add(playerMeshes[p.id]);
+                socket.on('playerMoved', (p) => {
+                    if(p.id !== socket.id && p.alive) {
+                        if(!playerMeshes[p.id]) {
+                            playerMeshes[p.id] = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1), new THREE.MeshLambertMaterial({ color: 0xff4444 }));
+                            scene.add(playerMeshes[p.id]);
+                        }
+                        playerMeshes[p.id].position.set(p.x, 1, p.z);
                     }
-                    playerMeshes[p.id].position.set(p.x, 1, p.z);
-                }
-            });
-            socket.on('playerKilled', (id) => {
-                if(id === socket.id) { alert("Tu as été éliminé !"); location.reload(); }
-                if(playerMeshes[id]) { scene.remove(playerMeshes[id]); delete playerMeshes[id]; }
-            });
+                });
+            } catch(e) {}
+
+            animate();
         }
 
         function animate() {
@@ -137,8 +122,27 @@
 
             if(isReady && document.pointerLockElement) {
                 const oldPos = camera.position.clone();
-                const speed = 9 * delta;
+                const speed = 10 * delta;
 
                 if(keys['KeyW']) camera.translateZ(-speed);
                 if(keys['KeyS']) camera.translateZ(speed);
-                if(keys['
+                if(keys['KeyA']) camera.translateX(-speed);
+                if(keys['KeyD']) camera.translateX(speed);
+
+                camera.position.y = 1.6;
+                const pBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(0.8, 1, 0.8));
+                for(let b of buildingBoxes) {
+                    if(pBox.intersectsBox(b)) { camera.position.copy(oldPos); break; }
+                }
+                if(socket) socket.emit('playerMovement', { x: camera.position.x, z: camera.position.z, ry: camera.rotation.y });
+            }
+            if(renderer) renderer.render(scene, camera);
+            prevTime = time;
+        }
+
+        document.addEventListener('mousemove', (e) => { if(document.pointerLockElement) camera.rotation.y -= e.movementX * 0.002; });
+        window.addEventListener('keydown', (e) => keys[e.code] = true);
+        window.addEventListener('keyup', (e) => keys[e.code] = false);
+    </script>
+</body>
+</html>
