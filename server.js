@@ -1,35 +1,43 @@
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
-const io = require('socket.io')(http, {
-    cors: { origin: "*", methods: ["GET", "POST"] }
-});
+const io = require('socket.io')(http, { cors: { origin: "*", methods: ["GET", "POST"] } });
 const path = require('path');
 
-// --- AJOUT : Cette partie dit au serveur d'envoyer ton index.html ---
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-// Autorise aussi l'accès aux autres fichiers du dossier
+app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); });
 app.use(express.static(__dirname));
-// ------------------------------------------------------------------
 
 let players = {};
+let gameStarted = false;
+
+function resetRoles() {
+    const ids = Object.keys(players);
+    if (ids.length < 2) return; 
+
+    // Tout le monde devient Innocent par défaut
+    ids.forEach(id => { players[id].role = 'Innocent'; players[id].alive = true; });
+
+    // On choisit un Murderer au hasard
+    const murdererId = ids[Math.floor(Math.random() * ids.length)];
+    players[murdererId].role = 'Murderer';
+    
+    io.emit('gameStarted', players);
+    gameStarted = true;
+}
 
 io.on('connection', (socket) => {
-    console.log('Joueur connecté : ' + socket.id);
-
     players[socket.id] = {
-        x: Math.random() * 500 + 50,
-        y: Math.random() * 400 + 50,
-        id: socket.id,
-        role: Object.keys(players).length === 0 ? 'Murderer' : 'Innocent',
-        alive: true
+        x: 100, y: 100, id: socket.id,
+        role: 'Attente...', alive: true
     };
 
     socket.emit('currentPlayers', players);
     socket.broadcast.emit('newPlayer', players[socket.id]);
+
+    // Si on passe à 2 joueurs, on lance les rôles après 5 sec
+    if (Object.keys(players).length === 2 && !gameStarted) {
+        setTimeout(resetRoles, 5000);
+    }
 
     socket.on('playerMovement', (mov) => {
         if (players[socket.id] && players[socket.id].alive) {
@@ -56,9 +64,10 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         delete players[socket.id];
+        if (Object.keys(players).length < 2) gameStarted = false;
         io.emit('playerDisconnected', socket.id);
     });
 });
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => { console.log('Serveur prêt sur le port ' + PORT); });
+http.listen(PORT, () => { console.log('Serveur prêt !'); });
