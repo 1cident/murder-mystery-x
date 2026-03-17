@@ -2,21 +2,24 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Murder Mystery 3D - Labyrinthe</title>
+    <title>Murder Mystery 3D - Fix</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; }
-        #hud { position: absolute; top: 20px; left: 20px; color: gold; font-family: 'Courier New', monospace; font-size: 1.2em; text-shadow: 2px 2px black; z-index: 10; }
-        #instructions { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); color: white; cursor: pointer; z-index: 100; text-align: center; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; background: white; border-radius: 50%; transform: translate(-50%, -50%); opacity: 0.5; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #hud { position: absolute; top: 20px; left: 20px; color: white; z-index: 10; font-weight: bold; }
+        #instructions { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); color: gold; z-index: 100; text-align: center; }
+        input { padding: 12px; font-size: 1.2em; border: 2px solid gold; background: #111; color: white; margin-bottom: 10px; }
+        button { padding: 15px 40px; background: gold; border: none; font-weight: bold; cursor: pointer; font-size: 1.1em; }
+        canvas { display: block; }
     </style>
 </head>
 <body>
 
-<div id="hud">Rôle : Attente...</div>
-<div id="crosshair"></div>
+<div id="hud">Rôle: Non connecté</div>
 <div id="instructions">
-    <h1>LABYRINTHE DU MEURTRIER</h1>
-    <p>Clique pour entrer<br>(ZQSD pour bouger | Espace pour attaquer)</p>
+    <h1>MURDER MYSTERY 3D</h1>
+    <input type="text" id="nickname" placeholder="Ton Pseudo..." maxlength="12">
+    <button id="joinBtn">REJOINDRE LA PARTIE</button>
+    <p style="color: white; font-size: 0.8em; margin-top: 20px;">ZQSD pour bouger | Souris pour regarder</p>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -27,38 +30,40 @@
     let scene, camera, renderer, players = {}, playerMeshes = {};
     let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
     let velocity = new THREE.Vector3(), prevTime = performance.now();
+    let canMove = false;
 
-    // 1 = Mur, 0 = Vide (Labyrinthe)
     const map = [
-        [1,1,1,1,1,1,1,1,1,1],
-        [1,0,0,0,0,1,0,0,0,1],
-        [1,0,1,1,0,1,0,1,0,1],
-        [1,0,1,0,0,0,0,1,0,1],
-        [1,0,1,0,1,1,1,1,0,1],
-        [1,0,0,0,0,0,0,0,0,1],
-        [1,1,1,1,1,1,1,1,1,1],
+        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+        [1,0,0,0,1,0,0,0,0,0,0,1,0,0,1],
+        [1,0,1,0,1,0,1,1,1,1,0,1,0,1,1],
+        [1,0,1,0,0,0,0,0,0,1,0,0,0,0,1],
+        [1,0,1,1,1,1,1,1,0,1,1,1,1,0,1],
+        [1,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
     ];
     const wallMeshes = [];
 
     function init() {
         scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x020202);
-        scene.fog = new THREE.Fog(0x020202, 1, 12); // Brouillard épais
+        scene.background = new THREE.Color(0x050505);
+        scene.fog = new THREE.Fog(0x050505, 1, 25); // Vision plus large
 
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        
+        // Lumières
+        const ambient = new THREE.AmbientLight(0x404040, 0.5); // Lumière globale faible
+        scene.add(ambient);
+        const torch = new THREE.PointLight(0xffffff, 1.2, 15); // Torche du joueur
+        camera.add(torch);
+        scene.add(camera);
+
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // Lumière de poche (torche)
-        const torch = new THREE.PointLight(0xffaa44, 1.5, 10);
-        camera.add(torch);
-        scene.add(camera);
-
-        // Construction du labyrinthe
+        // Map
         const wallGeo = new THREE.BoxGeometry(2, 4, 2);
-        const wallMat = new THREE.MeshPhongMaterial({ color: 0x333333 });
-        
+        const wallMat = new THREE.MeshPhongMaterial({ color: 0x444444 });
         map.forEach((row, z) => {
             row.forEach((cell, x) => {
                 if (cell === 1) {
@@ -70,90 +75,87 @@
             });
         });
 
-        // Sol
-        const floorGeo = new THREE.PlaneGeometry(100, 100);
-        const floorMat = new THREE.MeshPhongMaterial({ color: 0x0a0a0a });
-        const floor = new THREE.Mesh(floorGeo, floorMat);
-        floor.rotation.x = -Math.PI / 2;
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshPhongMaterial({color: 0x111111}));
+        floor.rotation.x = -Math.PI/2;
         scene.add(floor);
 
         animate();
     }
 
-    document.getElementById('instructions').addEventListener('click', () => document.body.requestPointerLock());
-    document.addEventListener('pointerlockchange', () => document.getElementById('instructions').style.display = document.pointerLockElement ? 'none' : 'flex');
-    document.addEventListener('mousemove', (e) => { if(document.pointerLockElement) camera.rotation.y -= e.movementX * 0.002; });
+    // Gestion du pseudo et entrée
+    document.getElementById('joinBtn').onclick = () => {
+        const nick = document.getElementById('nickname').value;
+        if(nick) {
+            socket.emit('joinGame', nick);
+            document.body.requestPointerLock();
+            document.getElementById('instructions').style.display = 'none';
+            canMove = true;
+        }
+    };
 
-    window.addEventListener('keydown', (e) => {
-        if (e.code === 'KeyW') moveForward = true;
-        if (e.code === 'KeyS') moveBackward = true;
-        if (e.code === 'KeyA') moveLeft = true;
-        if (e.code === 'KeyD') moveRight = true;
-        if (e.code === 'Space') socket.emit('attack');
-    });
-    window.addEventListener('keyup', (e) => {
-        if (e.code === 'KeyW') moveForward = false;
-        if (e.code === 'KeyS') moveBackward = false;
-        if (e.code === 'KeyA') moveLeft = false;
-        if (e.code === 'KeyD') moveRight = false;
+    document.addEventListener('mousemove', (e) => {
+        if (document.pointerLockElement) camera.rotation.y -= e.movementX * 0.002;
     });
 
-    socket.on('currentPlayers', (p) => { players = p; updateHUD(); });
+    const onKey = (val) => (e) => {
+        if (e.code === 'KeyW') moveForward = val;
+        if (e.code === 'KeyS') moveBackward = val;
+        if (e.code === 'KeyA') moveLeft = val;
+        if (e.code === 'KeyD') moveRight = val;
+        if (val && e.code === 'Space') socket.emit('attack');
+    };
+    window.addEventListener('keydown', onKey(true));
+    window.addEventListener('keyup', onKey(false));
+
+    socket.on('currentPlayers', (p) => { 
+        players = p; 
+        const me = players[socket.id];
+        if(me) document.getElementById('hud').innerText = `Rôle: ${me.role.toUpperCase()}`;
+    });
+
     socket.on('playerMoved', (p) => {
         players[p.id] = p;
         if (p.id !== socket.id && p.alive) {
             if (!playerMeshes[p.id]) {
-                const geo = new THREE.CylinderGeometry(0.4, 0.4, 1.8);
-                const mat = new THREE.MeshPhongMaterial({ color: 0xd4af37 });
-                playerMeshes[p.id] = new THREE.Mesh(geo, mat);
+                playerMeshes[p.id] = new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,2), new THREE.MeshPhongMaterial({color: 0xd4af37}));
                 scene.add(playerMeshes[p.id]);
             }
-            playerMeshes[p.id].position.set(p.x, 0.9, p.z);
+            playerMeshes[p.id].position.set(p.x, 1, p.z);
         }
     });
-
-    socket.on('playerKilled', (id) => {
-        if(players[id]) players[id].alive = false;
-        if(playerMeshes[id]) { scene.remove(playerMeshes[id]); delete playerMeshes[id]; }
-        if(id === socket.id) alert("MORT !");
-    });
-
-    function updateHUD() {
-        const me = players[socket.id];
-        if (me) document.getElementById('hud').innerText = `RÔLE : ${me.role.toUpperCase()}`;
-    }
 
     function animate() {
         requestAnimationFrame(animate);
         const time = performance.now();
-        const delta = (time - prevTime) / 1000;
+        const delta = Math.min((time - prevTime) / 1000, 0.1);
         const me = players[socket.id];
 
-        if (document.pointerLockElement && me && me.alive) {
+        if (canMove && document.pointerLockElement && me && me.alive) {
             let oldPos = camera.position.clone();
-            velocity.z -= velocity.z * 10.0 * delta;
-            velocity.x -= velocity.x * 10.0 * delta;
+            velocity.set(0, 0, 0);
 
-            if (moveForward) velocity.z -= 40.0 * delta;
-            if (moveBackward) velocity.z += 40.0 * delta;
-            if (moveLeft) velocity.x -= 40.0 * delta;
-            if (moveRight) velocity.x += 40.0 * delta;
+            if (moveForward) velocity.z -= 5.0;
+            if (moveBackward) velocity.z += 5.0;
+            if (moveLeft) velocity.x -= 5.0;
+            if (moveRight) velocity.x += 5.0;
 
             camera.translateX(velocity.x * delta);
             camera.translateZ(velocity.z * delta);
             
-            // Collision simple avec les murs
-            let playerBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(0.5, 1, 0.5));
+            // Collision
+            let pBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(0.6, 1, 0.6));
             for(let wall of wallMeshes) {
-                if(playerBox.intersectsBox(wall)) camera.position.copy(oldPos);
+                if(pBox.intersectsBox(wall)) camera.position.copy(oldPos);
             }
 
             camera.position.y = 1.6;
             socket.emit('playerMovement', { x: camera.position.x, z: camera.position.z, ry: camera.rotation.y });
         }
+
         renderer.render(scene, camera);
         prevTime = time;
     }
+
     init();
 </script>
 </body>
