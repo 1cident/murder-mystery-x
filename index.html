@@ -2,45 +2,64 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Murder Mystery X - Vision Réelle</title>
+    <title>Murder Mystery X - Vision & Combat</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Special+Elite&display=swap" rel="stylesheet">
     <style>
-        body { margin: 0; background: #000; color: #d4af37; font-family: sans-serif; overflow: hidden; }
-        #hud { position: absolute; top: 10px; left: 10px; z-index: 100; background: rgba(0,0,0,0.7); padding: 10px; border: 1px solid #d4af37; }
-        canvas { display: block; }
+        body { margin: 0; background: #000; color: #d4af37; font-family: 'Special Elite', cursive; overflow: hidden; }
+        #hud { position: absolute; top: 15px; left: 15px; z-index: 100; background: rgba(0,0,0,0.8); padding: 12px; border: 2px solid #d4af37; pointer-events: none; }
+        canvas { display: none; background: #050505; }
         #menu { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #000; z-index: 200; }
-        button { padding: 15px 40px; background: none; border: 2px solid #d4af37; color: #d4af37; cursor: pointer; font-size: 1.5em; }
+        h1 { font-family: 'Bangers', cursive; font-size: 4em; margin-bottom: 20px; }
+        button { padding: 15px 40px; background: none; border: 2px solid #d4af37; color: #d4af37; cursor: pointer; font-size: 1.5em; font-family: 'Special Elite'; transition: 0.3s; }
+        button:hover { background: #d4af37; color: #000; }
     </style>
 </head>
 <body>
 
-<div id="hud">En attente de joueurs...</div>
+<div id="hud">Initialisation du serveur...</div>
+
 <div id="menu">
-    <h1 style="font-size: 4em;">MURDER MYSTERY X</h1>
-    <button onclick="startGame()">JOUER</button>
+    <h1>MURDER MYSTERY X</h1>
+    <p>Le Shérif doit protéger les Innocents.</p>
+    <button onclick="startGame()">ENTRER DANS L'ARÈNE</button>
 </div>
+
 <canvas id="gameCanvas"></canvas>
 
 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
 <script>
     const socket = io("https://murder-mystery-x.onrender.com");
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
+    const hud = document.getElementById('hud');
     
     let players = {};
+    let bullets = []; 
     let gameActive = false;
     const keys = {};
 
+    // --- LA MAP (MURS) ---
     const walls = [
-        {x: 100, y: 100, w: 200, h: 20},
-        {x: 400, y: 0, w: 20, h: 300},
-        {x: 100, y: 400, w: 500, h: 20},
-        {x: 700, y: 200, w: 20, h: 400}
+        {x: 150, y: 100, w: 300, h: 30},
+        {x: 550, y: 0, w: 30, h: 400},
+        {x: 100, y: 500, w: 600, h: 30},
+        {x: 0, y: 300, w: 200, h: 30},
+        {x: 400, y: 300, w: 100, h: 100}
     ];
 
+    // --- RÉCEPTION SERVEUR ---
     socket.on('currentPlayers', (p) => { players = p; });
     socket.on('gameStarted', (p) => { players = p; });
     socket.on('playerMoved', (p) => { players[p.id] = p; });
-    socket.on('playerKilled', (id) => { if(players[id]) players[id].alive = false; });
+    socket.on('playerKilled', (id) => { 
+        if(players[id]) players[id].alive = false; 
+        if(id === socket.id) alert("DOMMAGE... TU ES MORT.");
+    });
+    socket.on('bulletFired', (data) => {
+        bullets.push({ fromX: data.from.x, fromY: data.from.y, toX: data.to.x, toY: data.to.y, alpha: 1.0 });
+    });
+    socket.on('playerDisconnected', (id) => { delete players[id]; });
 
     function startGame() {
         document.getElementById('menu').style.display = 'none';
@@ -50,68 +69,100 @@
         gameLoop();
     }
 
+    // --- CONTRÔLES ---
     window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
     window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
     
-    // Tir du Shérif au clic
     window.addEventListener('mousedown', e => {
         const me = players[socket.id];
-        if (me && me.role === 'Sheriff' && me.alive) {
-            socket.emit('shoot', {x: e.clientX, y: e.clientY});
-        } else if (me && me.role === 'Murderer' && me.alive) {
-            socket.emit('attack');
+        if (me && me.alive) {
+            if (me.role === 'Sheriff') {
+                socket.emit('shoot', { x: e.clientX, y: e.clientY });
+            } else if (me.role === 'Murderer') {
+                socket.emit('attack');
+            }
         }
     });
 
     function checkCollision(x, y) {
         for (let w of walls) {
-            if (x+10 > w.x && x-10 < w.x+w.w && y+10 > w.y && y-10 < w.y+w.h) return true;
+            if (x+15 > w.x && x-15 < w.x+w.w && y+15 > w.y && y-15 < w.y+w.h) return true;
         }
-        return x < 0 || x > canvas.width || y < 0 || y > canvas.height;
+        return x < 15 || x > canvas.width-15 || y < 15 || y > canvas.height-15;
     }
 
     function update() {
         const me = players[socket.id];
         if (!me || !me.alive) return;
+
         let oldX = me.x, oldY = me.y;
-        if (keys['z']) me.y -= 4; if (checkCollision(me.x, me.y)) me.y = oldY;
-        if (keys['s']) me.y += 4; if (checkCollision(me.x, me.y)) me.y = oldY;
-        if (keys['q']) me.x -= 4; if (checkCollision(me.x, me.y)) me.x = oldX;
-        if (keys['d']) me.x += 4; if (checkCollision(me.x, me.y)) me.x = oldX;
-        if (oldX !== me.x || oldY !== me.y) socket.emit('playerMovement', {x: me.x, y: me.y});
+        let speed = 4.5;
+
+        if (keys['z']) me.y -= speed; if (checkCollision(me.x, me.y)) me.y = oldY;
+        if (keys['s']) me.y += speed; if (checkCollision(me.x, me.y)) me.y = oldY;
+        if (keys['q']) me.x -= speed; if (checkCollision(me.x, me.y)) me.x = oldX;
+        if (keys['d']) me.x += speed; if (checkCollision(me.x, me.y)) me.x = oldX;
+
+        if (oldX !== me.x || oldY !== me.y) {
+            socket.emit('playerMovement', { x: me.x, y: me.y });
+        }
     }
 
     function draw() {
         const me = players[socket.id];
         if (!me) return;
 
-        // 1. Dessiner le sol et les murs normalement
-        ctx.fillStyle = "#111";
+        // 1. Fond et Murs
+        ctx.fillStyle = "#0a0a0a";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         
-        ctx.fillStyle = "#333";
-        walls.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
+        ctx.fillStyle = "#222";
+        walls.forEach(w => {
+            ctx.fillRect(w.x, w.y, w.w, w.h);
+            ctx.strokeStyle = "#444";
+            ctx.strokeRect(w.x, w.y, w.w, w.h);
+        });
 
-        // 2. Dessiner les joueurs
+        // 2. Joueurs (visibles seulement si en vie)
         Object.values(players).forEach(p => {
             if (!p.alive) return;
-            ctx.fillStyle = (p.id === socket.id && p.role === 'Murderer') ? 'red' : (p.id === socket.id && p.role === 'Sheriff' ? 'blue' : '#d4af37');
+            
+            // Couleurs : Toi (Rouge/Bleu selon rôle), Autres (Doré)
+            if (p.id === socket.id) {
+                ctx.fillStyle = p.role === 'Murderer' ? '#ff0000' : (p.role === 'Sheriff' ? '#00ccff' : '#d4af37');
+            } else {
+                ctx.fillStyle = "#d4af37"; 
+            }
+            
             ctx.fillRect(p.x - 15, p.y - 15, 30, 30);
         });
 
-        // 3. LE SYSTÈME DE VISION (Lumière autour du joueur)
+        // 3. Dessin des balles
+        bullets.forEach((b, i) => {
+            ctx.strokeStyle = `rgba(255, 255, 255, ${b.alpha})`;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(b.fromX, b.fromY);
+            ctx.lineTo(b.toX, b.toY);
+            ctx.stroke();
+            b.alpha -= 0.04;
+            if(b.alpha <= 0) bullets.splice(i, 1);
+        });
+
+        // 4. SYSTÈME DE VISION (Brouillard)
         if (me.alive) {
             ctx.save();
             ctx.beginPath();
-            // On crée un cercle de vision
-            ctx.arc(me.x, me.y, 250, 0, Math.PI * 2);
-            ctx.rect(canvas.width, 0, -canvas.width, canvas.height); // Inversion pour remplir l'extérieur
-            ctx.fillStyle = "rgba(0,0,0,0.98)"; // Noir presque total
+            ctx.arc(me.x, me.y, 250, 0, Math.PI * 2); // Rayon de vision
+            ctx.rect(canvas.width, 0, -canvas.width, canvas.height); 
+            ctx.fillStyle = "rgba(0,0,0,0.97)"; 
             ctx.fill();
             ctx.restore();
         }
 
-        document.getElementById('hud').innerHTML = `RÔLE: ${me.role} | CLIC pour action`;
+        // HUD
+        const roleColor = me.role === 'Murderer' ? 'red' : (me.role === 'Sheriff' ? '#00ccff' : '#d4af37');
+        hud.innerHTML = `RÔLE : <span style="color:${roleColor}">${me.role.toUpperCase()}</span> | STATUT : ${me.alive ? 'VIVANT' : 'MORT'}`;
     }
 
     function gameLoop() {
