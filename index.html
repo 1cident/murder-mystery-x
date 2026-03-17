@@ -2,24 +2,22 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Murder Mystery 3D - Fix</title>
+    <title>Murder Mystery 3D - Debug</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        #hud { position: absolute; top: 20px; left: 20px; color: white; z-index: 10; font-weight: bold; }
-        #instructions { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); color: gold; z-index: 100; text-align: center; }
-        input { padding: 12px; font-size: 1.2em; border: 2px solid gold; background: #111; color: white; margin-bottom: 10px; }
-        button { padding: 15px 40px; background: gold; border: none; font-weight: bold; cursor: pointer; font-size: 1.1em; }
-        canvas { display: block; }
+        body { margin: 0; overflow: hidden; background: #111; font-family: sans-serif; }
+        #hud { position: absolute; top: 10px; left: 10px; color: gold; z-index: 10; font-size: 1.5em; }
+        #instructions { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); color: white; z-index: 100; }
+        input { padding: 10px; margin: 10px; font-size: 1.2em; }
+        button { padding: 15px 30px; font-size: 1.2em; cursor: pointer; background: gold; border: none; font-weight: bold; }
     </style>
 </head>
 <body>
 
-<div id="hud">Rôle: Non connecté</div>
+<div id="hud">Rôle : En attente...</div>
 <div id="instructions">
-    <h1>MURDER MYSTERY 3D</h1>
-    <input type="text" id="nickname" placeholder="Ton Pseudo..." maxlength="12">
-    <button id="joinBtn">REJOINDRE LA PARTIE</button>
-    <p style="color: white; font-size: 0.8em; margin-top: 20px;">ZQSD pour bouger | Souris pour regarder</p>
+    <h1>CLIQUE POUR VOIR LA MAP</h1>
+    <input type="text" id="nickname" placeholder="Pseudo..." maxlength="10">
+    <button id="joinBtn">ENTRER</button>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -29,95 +27,90 @@
     const socket = io("https://murder-mystery-x.onrender.com");
     let scene, camera, renderer, players = {}, playerMeshes = {};
     let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-    let velocity = new THREE.Vector3(), prevTime = performance.now();
-    let canMove = false;
+    let prevTime = performance.now();
+    let isReady = false;
 
+    // Map simple (1 = mur, 0 = vide)
     const map = [
-        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-        [1,0,0,0,1,0,0,0,0,0,0,1,0,0,1],
-        [1,0,1,0,1,0,1,1,1,1,0,1,0,1,1],
-        [1,0,1,0,0,0,0,0,0,1,0,0,0,0,1],
-        [1,0,1,1,1,1,1,1,0,1,1,1,1,0,1],
-        [1,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
-        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+        [1,1,1,1,1,1,1,1,1],
+        [1,0,0,0,0,0,0,0,1],
+        [1,0,1,1,0,1,1,0,1],
+        [1,0,0,0,0,0,0,0,1],
+        [1,1,1,1,1,1,1,1,1],
     ];
-    const wallMeshes = [];
+    const wallBoxes = [];
 
     function init() {
         scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x050505);
-        scene.fog = new THREE.Fog(0x050505, 1, 25); // Vision plus large
+        scene.background = new THREE.Color(0x222222); // Fond gris pour voir les volumes
 
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        
-        // Lumières
-        const ambient = new THREE.AmbientLight(0x404040, 0.5); // Lumière globale faible
-        scene.add(ambient);
-        const torch = new THREE.PointLight(0xffffff, 1.2, 15); // Torche du joueur
-        camera.add(torch);
-        scene.add(camera);
+        camera.position.set(2, 1.6, 2); // Position de départ
 
-        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer = new THREE.WebGLRenderer();
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // Map
+        // LUMIÈRE GÉNÉRALE (Pour être sûr de voir)
+        const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
+        scene.add(light);
+
+        // Création du Sol
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(50, 50), new THREE.MeshPhongMaterial({color: 0x333333}));
+        floor.rotation.x = -Math.PI / 2;
+        scene.add(floor);
+
+        // Création des Murs
         const wallGeo = new THREE.BoxGeometry(2, 4, 2);
-        const wallMat = new THREE.MeshPhongMaterial({ color: 0x444444 });
+        const wallMat = new THREE.MeshPhongMaterial({color: 0x888888});
         map.forEach((row, z) => {
             row.forEach((cell, x) => {
-                if (cell === 1) {
+                if(cell === 1) {
                     const wall = new THREE.Mesh(wallGeo, wallMat);
                     wall.position.set(x * 2, 2, z * 2);
                     scene.add(wall);
-                    wallMeshes.push(new THREE.Box3().setFromObject(wall));
+                    wallBoxes.push(new THREE.Box3().setFromObject(wall));
                 }
             });
         });
 
-        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshPhongMaterial({color: 0x111111}));
-        floor.rotation.x = -Math.PI/2;
-        scene.add(floor);
-
         animate();
     }
 
-    // Gestion du pseudo et entrée
     document.getElementById('joinBtn').onclick = () => {
         const nick = document.getElementById('nickname').value;
         if(nick) {
             socket.emit('joinGame', nick);
             document.body.requestPointerLock();
             document.getElementById('instructions').style.display = 'none';
-            canMove = true;
+            isReady = true;
         }
     };
 
     document.addEventListener('mousemove', (e) => {
-        if (document.pointerLockElement) camera.rotation.y -= e.movementX * 0.002;
+        if(document.pointerLockElement) camera.rotation.y -= e.movementX * 0.003;
     });
 
-    const onKey = (val) => (e) => {
-        if (e.code === 'KeyW') moveForward = val;
-        if (e.code === 'KeyS') moveBackward = val;
-        if (e.code === 'KeyA') moveLeft = val;
-        if (e.code === 'KeyD') moveRight = val;
-        if (val && e.code === 'Space') socket.emit('attack');
+    const keyUpdate = (val) => (e) => {
+        if(e.code === 'KeyW') moveForward = val;
+        if(e.code === 'KeyS') moveBackward = val;
+        if(e.code === 'KeyA') moveLeft = val;
+        if(e.code === 'KeyD') moveRight = val;
+        if(val && e.code === 'Space') socket.emit('attack');
     };
-    window.addEventListener('keydown', onKey(true));
-    window.addEventListener('keyup', onKey(false));
+    window.addEventListener('keydown', keyUpdate(true));
+    window.addEventListener('keyup', keyUpdate(false));
 
     socket.on('currentPlayers', (p) => { 
         players = p; 
-        const me = players[socket.id];
-        if(me) document.getElementById('hud').innerText = `Rôle: ${me.role.toUpperCase()}`;
+        if(players[socket.id]) document.getElementById('hud').innerText = "Rôle : " + players[socket.id].role;
     });
 
     socket.on('playerMoved', (p) => {
         players[p.id] = p;
-        if (p.id !== socket.id && p.alive) {
-            if (!playerMeshes[p.id]) {
-                playerMeshes[p.id] = new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,2), new THREE.MeshPhongMaterial({color: 0xd4af37}));
+        if(p.id !== socket.id && p.alive) {
+            if(!playerMeshes[p.id]) {
+                playerMeshes[p.id] = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1), new THREE.MeshPhongMaterial({color: 0xff0000}));
                 scene.add(playerMeshes[p.id]);
             }
             playerMeshes[p.id].position.set(p.x, 1, p.z);
@@ -128,27 +121,24 @@
         requestAnimationFrame(animate);
         const time = performance.now();
         const delta = Math.min((time - prevTime) / 1000, 0.1);
-        const me = players[socket.id];
 
-        if (canMove && document.pointerLockElement && me && me.alive) {
-            let oldPos = camera.position.clone();
-            velocity.set(0, 0, 0);
+        if(isReady && document.pointerLockElement && players[socket.id]) {
+            const oldPos = camera.position.clone();
+            const speed = 5 * delta;
 
-            if (moveForward) velocity.z -= 5.0;
-            if (moveBackward) velocity.z += 5.0;
-            if (moveLeft) velocity.x -= 5.0;
-            if (moveRight) velocity.x += 5.0;
+            if(moveForward) camera.translateZ(-speed);
+            if(moveBackward) camera.translateZ(speed);
+            if(moveLeft) camera.translateX(-speed);
+            if(moveRight) camera.translateX(speed);
 
-            camera.translateX(velocity.x * delta);
-            camera.translateZ(velocity.z * delta);
-            
+            camera.position.y = 1.6; // Garder la hauteur stable
+
             // Collision
-            let pBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(0.6, 1, 0.6));
-            for(let wall of wallMeshes) {
+            const pBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(0.5, 1, 0.5));
+            for(let wall of wallBoxes) {
                 if(pBox.intersectsBox(wall)) camera.position.copy(oldPos);
             }
 
-            camera.position.y = 1.6;
             socket.emit('playerMovement', { x: camera.position.x, z: camera.position.z, ry: camera.rotation.y });
         }
 
