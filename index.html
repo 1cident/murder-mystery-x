@@ -2,54 +2,51 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>MMX - Force Render</title>
+    <title>MMX - Maison Statique</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #87CEEB; font-family: sans-serif; }
-        #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #87CEEB; z-index: 1000; }
+        body { margin: 0; overflow: hidden; background: #00BFFF; font-family: sans-serif; }
+        #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #00BFFF; z-index: 1000; }
         #status { color: white; font-weight: bold; font-size: 20px; text-shadow: 2px 2px black; }
-        #btn-play { padding: 15px 40px; font-size: 24px; cursor: pointer; display: none; margin-top: 20px; background: #ff4757; color: white; border: none; border-radius: 10px; }
+        #btn-play { padding: 15px 40px; font-size: 24px; cursor: pointer; display: none; margin-top: 20px; background: #ff4757; color: white; border: none; border-radius: 10px; box-shadow: 0 5px 0 #b30000; }
     </style>
 </head>
 <body>
 
     <div id="overlay">
-        <div id="status">Chargement...</div>
-        <button id="btn-play">JOUER</button>
+        <div id="status">Chargement de la zone...</div>
+        <button id="btn-play">COMMENCER</button>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
     <script>
-        let scene, camera, renderer, model;
+        let scene, camera, renderer, maison;
 
         const loader = new THREE.GLTFLoader();
         loader.load('./maison.glb', (gltf) => {
-            model = gltf.scene;
+            maison = gltf.scene;
 
-            // --- MAGIE : REDIMENSIONNEMENT AUTOMATIQUE ---
-            const box = new THREE.Box3().setFromObject(model);
+            // --- CALIBRAGE TAILLE ---
+            const box = new THREE.Box3().setFromObject(maison);
             const size = box.getSize(new THREE.Vector3());
             const maxDim = Math.max(size.x, size.y, size.z);
-            const scale = 10 / maxDim; // On force la maison à faire 10 unités de large
-            model.scale.set(scale, scale, scale);
+            const scale = 20 / maxDim; // On la fait assez grande
+            maison.scale.set(scale, scale, scale);
             
-            // On la centre
+            // --- POSITIONNEMENT ---
             const center = box.getCenter(new THREE.Vector3());
-            model.position.x = -center.x * scale;
-            model.position.y = -center.y * scale;
-            model.position.z = -center.z * scale;
-            model.position.y += 5; // On la pose sur le sol
+            maison.position.x = -center.x * scale;
+            maison.position.y = -center.y * scale;
+            maison.position.z = -center.z * scale;
+            maison.position.y += size.y * scale / 2; // Pose la base sur le sol
 
-            document.getElementById('status').innerText = "✅ Maison calibrée !";
+            document.getElementById('status').innerText = "✅ Prêt !";
             document.getElementById('btn-play').style.display = "block";
         }, 
         (xhr) => {
             let p = Math.round((xhr.loaded / xhr.total) * 100);
-            document.getElementById('status').innerText = "Téléchargement : " + p + "%";
-        },
-        (err) => {
-            document.getElementById('status').innerText = "❌ Erreur : Fichier introuvable";
+            document.getElementById('status').innerText = "Installation : " + p + "%";
         });
 
         document.getElementById('btn-play').addEventListener('click', () => {
@@ -59,33 +56,54 @@
 
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB);
+            scene.background = new THREE.Color(0x00BFFF); // Ciel bleu vif
             
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 10, 25); // On se met à une distance raisonnable
+            
+            // --- POSITION DE DÉPART (SUR LA MAISON) ---
+            // On se place un peu en hauteur et au centre
+            camera.position.set(0, 12, 15); 
+            camera.lookAt(0, 5, 0);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            scene.add(new THREE.AmbientLight(0xffffff, 2)); // Lumière très forte
+            // Lumières
+            scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+            const sun = new THREE.DirectionalLight(0xffffff, 1);
+            sun.position.set(50, 100, 50);
+            scene.add(sun);
 
+            // Sol herbe
             const floor = new THREE.Mesh(
-                new THREE.PlaneGeometry(200, 200),
-                new THREE.MeshLambertMaterial({ color: 0x7cfc00 })
+                new THREE.PlaneGeometry(500, 500),
+                new THREE.MeshLambertMaterial({ color: 0x2ed573 })
             );
             floor.rotation.x = -Math.PI / 2;
             scene.add(floor);
 
-            if(model) scene.add(model);
+            if(maison) {
+                scene.add(maison);
+            }
+
             animate();
         }
 
         function animate() {
             requestAnimationFrame(animate);
-            if(model) model.rotation.y += 0.01;
+            // On a supprimé la ligne qui faisait tourner la maison
             renderer.render(scene, camera);
         }
+
+        // Redimensionnement fenêtre
+        window.addEventListener('resize', () => {
+            if(camera) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
     </script>
 </body>
 </html>
