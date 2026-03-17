@@ -2,18 +2,24 @@ const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
+    cors: { origin: "*", methods: ["GET", "POST"] }
 });
+const path = require('path');
+
+// --- AJOUT : Cette partie dit au serveur d'envoyer ton index.html ---
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Autorise aussi l'accès aux autres fichiers du dossier
+app.use(express.static(__dirname));
+// ------------------------------------------------------------------
 
 let players = {};
 
 io.on('connection', (socket) => {
     console.log('Joueur connecté : ' + socket.id);
 
-    // Création du joueur
     players[socket.id] = {
         x: Math.random() * 500 + 50,
         y: Math.random() * 400 + 50,
@@ -55,4 +61,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => { console.log('Serveur prêt !'); });
+http.listen(PORT, () => { console.log('Serveur prêt sur le port ' + PORT); });
