@@ -33,23 +33,19 @@ io.on('connection', (socket) => {
         const p = players[socket.id];
         if (p && p.role === 'Murderer' && p.alive) {
             Object.values(players).forEach(v => {
-                if (v.id !== socket.id && v.alive) {
-                    if (Math.hypot(v.x - p.x, v.z - p.z) < 2.5) {
-                        v.alive = false;
-                        io.emit('playerKilled', v.id);
-                    }
+                if (v.id !== socket.id && v.alive && Math.hypot(v.x - p.x, v.z - p.z) < 2) {
+                    v.alive = false;
+                    io.emit('playerKilled', v.id);
                 }
             });
         }
     });
 
     socket.on('disconnect', () => {
-        if (players[socket.id]) {
-            delete players[socket.id];
-            io.emit('playerDisconnected', socket.id);
-        }
+        delete players[socket.id];
+        io.emit('playerDisconnected', socket.id);
     });
 });
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => { console.log('Serveur 3D prêt'); });
+http.listen(PORT, () => { console.log('Serveur prêt'); });
