@@ -2,14 +2,14 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>MMX - QUARTIER RÉSIDENTIEL</title>
+    <title>MMX - QUARTIER DÉTAILLÉ</title>
     <style>
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: 'Segoe UI', sans-serif; }
-        #hud { position: absolute; top: 20px; left: 20px; color: #111; font-size: 24px; font-weight: bold; background: rgba(255,255,255,0.7); padding: 10px; border-radius: 8px; z-index: 10; pointer-events: none; }
+        #hud { position: absolute; top: 20px; left: 20px; color: #111; font-size: 22px; font-weight: bold; background: rgba(255,255,255,0.8); padding: 12px; border: 2px solid #333; border-radius: 8px; z-index: 10; pointer-events: none; }
         #crosshair { position: absolute; top: 50%; left: 50%; width: 14px; height: 14px; border: 2px solid #000; border-radius: 50%; transform: translate(-50%, -50%); z-index: 5; pointer-events: none; }
         #overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #87CEEB; z-index: 100; cursor: pointer; }
-        #btn-play { padding: 25px 50px; font-size: 30px; font-weight: bold; color: white; background: #ff4444; border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 10px 0 #cc0000; transition: 0.1s; }
-        #btn-play:active { transform: translateY(5px); box-shadow: 0 5px 0 #cc0000; }
+        #btn-play { padding: 25px 50px; font-size: 28px; font-weight: bold; color: white; background: #2ecc71; border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 8px 0 #27ae60; }
+        #btn-play:active { transform: translateY(4px); box-shadow: 0 4px 0 #27ae60; }
     </style>
 </head>
 <body>
@@ -18,7 +18,7 @@
     <div id="crosshair"></div>
 
     <div id="overlay">
-        <button id="btn-play">ENTRER DANS LE QUARTIER</button>
+        <button id="btn-play">DÉMARRER LA PARTIE</button>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -30,7 +30,6 @@
         const keys = {};
         let prevTime = performance.now();
 
-        // 1. DÉMARRAGE
         document.getElementById('btn-play').addEventListener('click', () => {
             document.getElementById('overlay').style.display = 'none';
             document.body.requestPointerLock();
@@ -40,8 +39,8 @@
 
         function initGame() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x7ec0ee); // Beau bleu ciel
-            scene.fog = new THREE.Fog(0x7ec0ee, 20, 150);
+            scene.background = new THREE.Color(0x87CEEB);
+            scene.fog = new THREE.Fog(0x87CEEB, 20, 150);
 
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 1.6, 20);
@@ -52,60 +51,81 @@
             document.body.appendChild(renderer.domElement);
 
             // LUMIÈRES
-            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-            const sun = new THREE.DirectionalLight(0xffffff, 0.6);
-            sun.position.set(50, 100, 50);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+            const sun = new THREE.DirectionalLight(0xffffff, 0.5);
+            sun.position.set(10, 50, 10);
             scene.add(sun);
 
-            // --- CRÉATION DU DÉCOR (ROUTE ET HERBE) ---
-            const ground = new THREE.Group();
-            // Herbe
-            const grass = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshLambertMaterial({color: 0x7cfc00}));
+            // --- SOL (HERBE ET ROUTE) ---
+            const world = new THREE.Group();
+            const grass = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), new THREE.MeshLambertMaterial({color: 0x567d46}));
             grass.rotation.x = -Math.PI / 2;
-            ground.add(grass);
-            // Route principale
-            const road = new THREE.Mesh(new THREE.PlaneGeometry(12, 200), new THREE.MeshLambertMaterial({color: 0x333333}));
-            road.rotation.x = -Math.PI / 2;
-            road.position.y = 0.05;
-            ground.add(road);
-            scene.add(ground);
+            world.add(grass);
 
-            // --- GÉNÉRATION DES MAISONS ---
-            function createHouse(x, z) {
+            // Route avec lignes blanches
+            const road = new THREE.Mesh(new THREE.PlaneGeometry(15, 300), new THREE.MeshLambertMaterial({color: 0x333333}));
+            road.rotation.x = -Math.PI / 2;
+            road.position.y = 0.02;
+            world.add(road);
+
+            const lineGeo = new THREE.PlaneGeometry(0.5, 4);
+            const lineMat = new THREE.MeshLambertMaterial({color: 0xffffff});
+            for(let i = -30; i < 30; i++) {
+                const line = new THREE.Mesh(lineGeo, lineMat);
+                line.rotation.x = -Math.PI / 2;
+                line.position.set(0, 0.05, i * 8);
+                world.add(line);
+            }
+            scene.add(world);
+
+            // --- FONCTION MAISON DÉTAILLÉE ---
+            function createHouse(x, z, color) {
                 const house = new THREE.Group();
-                // Corps de la maison
-                const body = new THREE.Mesh(
-                    new THREE.BoxGeometry(6, 5, 6),
-                    new THREE.MeshLambertMaterial({color: 0xffffff})
-                );
-                body.position.y = 2.5;
+                
+                // Murs
+                const body = new THREE.Mesh(new THREE.BoxGeometry(7, 6, 7), new THREE.MeshLambertMaterial({color: 0xffffff}));
+                body.position.y = 3;
                 house.add(body);
 
-                // Toit (Pyramide)
-                const roof = new THREE.Mesh(
-                    new THREE.ConeGeometry(5.5, 4, 4),
-                    new THREE.MeshLambertMaterial({color: 0xaa2222})
-                );
-                roof.position.y = 7;
+                // Toit
+                const roof = new THREE.Mesh(new THREE.ConeGeometry(6, 4, 4), new THREE.MeshLambertMaterial({color: color}));
+                roof.position.y = 8;
                 roof.rotation.y = Math.PI / 4;
                 house.add(roof);
+
+                // Fenêtres (petits cubes noirs)
+                const winGeo = new THREE.BoxGeometry(1, 1.2, 0.1);
+                const winMat = new THREE.MeshLambertMaterial({color: 0x333333});
+                const w1 = new THREE.Mesh(winGeo, winMat); w1.position.set(-1.5, 4, 3.51); house.add(w1);
+                const w2 = new THREE.Mesh(winGeo, winMat); w2.position.set(1.5, 4, 3.51); house.add(w2);
+
+                // Porte
+                const door = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.5, 0.1), new THREE.MeshLambertMaterial({color: 0x5d4037}));
+                door.position.set(0, 1.25, 3.51);
+                house.add(door);
+
+                // Clôture (Barrière)
+                const fence = new THREE.Mesh(new THREE.BoxGeometry(10, 1, 10), new THREE.MeshLambertMaterial({color: 0xffffff, wireframe: true}));
+                fence.position.y = 0.5;
+                house.add(fence);
 
                 house.position.set(x, 0, z);
                 scene.add(house);
                 colliders.push(new THREE.Box3().setFromObject(body));
             }
 
-            // Placer des maisons le long de la route
-            for(let i = -5; i <= 5; i++) {
-                if (i === 0) continue;
-                createHouse(-12, i * 20); // Rangée gauche
-                createHouse(12, i * 20);  // Rangée droite
+            // Génération du quartier
+            const colors = [0xff4444, 0x4444ff, 0xffcc00, 0xff8800];
+            for(let i = -4; i <= 4; i++) {
+                if(i === 0) continue;
+                createHouse(-15, i * 20, colors[Math.abs(i)%4]);
+                createHouse(15, i * 20, colors[Math.abs(i)%4]);
             }
 
-            // CONNEXION RÉSEAU
+            // RÉSEAU
             try {
                 socket = io("https://murder-mystery-x.onrender.com");
-                socket.emit('joinGame', "Player-" + Math.floor(Math.random()*99));
+                socket.emit('joinGame', "Joueur-" + Math.floor(Math.random()*99));
                 socket.on('currentPlayers', (p) => {
                     players = p;
                     if(players[socket.id]) document.getElementById('hud').innerText = "Rôle : " + players[socket.id].role.toUpperCase();
@@ -131,7 +151,7 @@
 
             if(isReady && document.pointerLockElement) {
                 const oldPos = camera.position.clone();
-                const speed = 12 * delta;
+                const speed = 13 * delta;
 
                 if(keys['KeyW']) camera.translateZ(-speed);
                 if(keys['KeyS']) camera.translateZ(speed);
@@ -140,13 +160,9 @@
 
                 camera.position.y = 1.6;
 
-                // Collisions avec les maisons
                 const pBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(1, 1, 1));
                 for(let box of colliders) {
-                    if(pBox.intersectsBox(box)) {
-                        camera.position.copy(oldPos);
-                        break;
-                    }
+                    if(pBox.intersectsBox(box)) { camera.position.copy(oldPos); break; }
                 }
 
                 if(socket) socket.emit('playerMovement', { x: camera.position.x, z: camera.position.z, ry: camera.rotation.y });
@@ -158,11 +174,6 @@
         document.addEventListener('mousemove', (e) => { if(document.pointerLockElement) camera.rotation.y -= e.movementX * 0.002; });
         window.addEventListener('keydown', (e) => keys[e.code] = true);
         window.addEventListener('keyup', (e) => keys[e.code] = false);
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
     </script>
 </body>
 </html>
