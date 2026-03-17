@@ -2,48 +2,40 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Murder Mystery X - Alpha</title>
+    <title>Murder Mystery X</title>
     <style>
-        body { margin: 0; background: #000; color: #d4af37; font-family: sans-serif; overflow: hidden; }
-        #game-ui { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; z-index: 10; }
-        canvas { display: none; background: #050505; }
-        #hud { position: absolute; top: 10px; left: 10px; z-index: 5; font-size: 20px; pointer-events: none; }
+        body { margin: 0; background: #000; color: #d4af37; font-family: sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        #game-ui { position: absolute; text-align: center; z-index: 10; background: rgba(0,0,0,0.8); padding: 20px; border: 2px solid #d4af37; }
+        canvas { display: none; background: #050505; cursor: crosshair; }
+        #hud { position: absolute; top: 10px; left: 10px; color: white; font-weight: bold; pointer-events: none; }
     </style>
 </head>
 <body>
 
 <div id="hud"></div>
 <div id="game-ui">
-    <h1 id="title">MURDER MYSTERY X</h1>
-    <button onclick="startGame()" style="padding: 15px 30px; cursor:pointer;">REJOINDRE</button>
+    <h1>MURDER MYSTERY X</h1>
+    <button onclick="startGame()" style="padding: 10px 20px; cursor: pointer;">JOUER</button>
 </div>
 
 <canvas id="gameCanvas"></canvas>
 
 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
 <script>
+    // --- REMPLACE PAR TON URL RENDER ---
     const socket = io("https://murder-mystery-x.onrender.com");
+    
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    const hud = document.getElementById('hud');
-    
     let players = {};
-    let myPlayer = { x: 400, y: 300, speed: 5, role: 'Innocent', alive: true };
     let gameRunning = false;
     const keys = {};
 
-    socket.on('currentPlayers', (p) => { 
-        players = p; 
-        if(p[socket.id]) myPlayer.role = p[socket.id].role;
-    });
+    socket.on('currentPlayers', (p) => { players = p; });
+    socket.on('newPlayer', (p) => { players[p.id] = p; });
     socket.on('playerMoved', (p) => { players[p.id] = p; });
-    socket.on('playerKilled', (id) => { 
-        if(players[id]) players[id].alive = false;
-        if(id === socket.id) {
-            myPlayer.alive = false;
-            alert("Tu as été tué !");
-        }
-    });
+    socket.on('playerKilled', (id) => { if(players[id]) players[id].alive = false; });
     socket.on('playerDisconnected', (id) => { delete players[id]; });
 
     function startGame() {
@@ -52,7 +44,7 @@
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
         gameRunning = true;
-        gameLoop();
+        requestAnimationFrame(gameLoop);
     }
 
     window.addEventListener('keydown', e => {
@@ -61,39 +53,30 @@
     });
     window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-    function update() {
-        if (!myPlayer.alive) return;
-        let moved = false;
-        if (keys['z'] || keys['arrowup']) { myPlayer.y -= myPlayer.speed; moved = true; }
-        if (keys['s'] || keys['arrowdown']) { myPlayer.y += myPlayer.speed; moved = true; }
-        if (keys['q'] || keys['arrowleft']) { myPlayer.x -= myPlayer.speed; moved = true; }
-        if (keys['d'] || keys['arrowright']) { myPlayer.x += myPlayer.speed; moved = true; }
-
-        if (moved) socket.emit('playerMovement', { x: myPlayer.x, y: myPlayer.y });
-    }
-
-    function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        hud.innerHTML = `RÔLE : ${myPlayer.role.toUpperCase()} | STATUT : ${myPlayer.alive ? 'VIVANT' : 'MORT'}`;
-
-        Object.values(players).forEach(p => {
-            if (!p.alive) return; // Ne pas dessiner les morts
-            
-            // Dessin du carré (Rouge si c'est nous et qu'on est Murderer, sinon doré)
-            ctx.fillStyle = (p.id === socket.id && p.role === 'Murderer') ? '#ff0000' : '#d4af37';
-            ctx.fillRect(p.x - 15, p.y - 15, 30, 30);
-            
-            // Pseudo (Optionnel)
-            ctx.fillStyle = "white";
-            ctx.font = "12px Arial";
-            ctx.fillText(p.role === 'Murderer' && p.id === socket.id ? "TOI (MURDER)" : "JOUEUR", p.x - 20, p.y - 25);
-        });
-    }
-
     function gameLoop() {
         if (!gameRunning) return;
-        update();
-        draw();
+        
+        // Update local
+        const me = players[socket.id];
+        if (me && me.alive) {
+            let moved = false;
+            if (keys['z']) { me.y -= 5; moved = true; }
+            if (keys['s']) { me.y += 5; moved = true; }
+            if (keys['q']) { me.x -= 5; moved = true; }
+            if (keys['d']) { me.x += 5; moved = true; }
+            if (moved) socket.emit('playerMovement', { x: me.x, y: me.y });
+        }
+
+        // Draw
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        document.getElementById('hud').innerText = me ? `RÔLE: ${me.role} | ${me.alive ? 'VIVANT' : 'MORT'}` : "";
+
+        Object.values(players).forEach(p => {
+            if (!p.alive) return;
+            ctx.fillStyle = (p.id === socket.id && p.role === 'Murderer') ? 'red' : '#d4af37';
+            ctx.fillRect(p.x - 15, p.y - 15, 30, 30);
+        });
+
         requestAnimationFrame(gameLoop);
     }
 </script>
