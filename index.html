@@ -2,20 +2,15 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Murder Mystery X - Style Concept</title>
+    <title>Murder Mystery X - Maison Abandonnée Edition</title>
     <style>
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: 'Arial Rounded MT Bold', sans-serif; }
-        
-        /* Interface HUD */
-        #hud { position: absolute; top: 20px; left: 20px; color: #333; font-size: 22px; font-weight: bold; background: white; padding: 12px 25px; border-radius: 15px; border: 4px solid #000; z-index: 10; pointer-events: none; display: none; }
-        
-        /* Emplacement Arme */
-        #weapon-slot { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 100px; height: 100px; background: #222; border: 5px solid #fff; border-radius: 20px; display: none; align-items: center; justify-content: center; font-size: 50px; box-shadow: 0 10px 25px rgba(0,0,0,0.4); z-index: 10; }
-        
-        /* Overlay de démarrage */
-        #overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #87CEEB; z-index: 1000; }
-        #btn-play { padding: 25px 80px; font-size: 40px; font-weight: bold; color: white; background: #ff4757; border: none; border-radius: 60px; cursor: pointer; box-shadow: 0 12px 0 #cc0000; transition: 0.1s; }
+        #hud { position: absolute; top: 20px; left: 20px; color: #333; font-size: 22px; font-weight: bold; background: white; padding: 12px 25px; border-radius: 15px; border: 4px solid #000; z-index: 10; display: none; }
+        #weapon-slot { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 100px; height: 100px; background: #222; border: 5px solid #fff; border-radius: 20px; display: none; align-items: center; justify-content: center; font-size: 50px; z-index: 10; }
+        #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #87CEEB; z-index: 1000; }
+        #btn-play { padding: 25px 80px; font-size: 40px; font-weight: bold; color: white; background: #ff4757; border: none; border-radius: 60px; cursor: pointer; box-shadow: 0 12px 0 #cc0000; transition: 0.1s; margin-bottom: 20px; }
         #btn-play:active { transform: translateY(6px); box-shadow: 0 6px 0 #cc0000; }
+        #loading-text { color: white; font-size: 18px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -25,62 +20,50 @@
     
     <div id="overlay">
         <button id="btn-play">JOUER</button>
+        <div id="loading-text">Chargement de la maison abandonnée...</div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
     <script>
         let socket, scene, camera, renderer, isReady = false;
         let players = {}, playerMeshes = {}, colliders = [];
+        let playerModelTemplate = null;
         const keys = {};
         let velocity = new THREE.Vector3(), canJump = false, prevTime = performance.now();
 
-        // --- GESTION DU BOUTON JOUER ---
-        document.getElementById('btn-play').addEventListener('click', function() {
-            // Tentative de verrouillage souris
-            const body = document.body;
-            const requestMethod = body.requestPointerLock || body.mozRequestPointerLock || body.webkitRequestPointerLock;
-            if (requestMethod) requestMethod.call(body);
+        // --- CHARGEMENT DE TON MODÈLE ---
+        const loader = new THREE.GLTFLoader();
+        // Utilisation du nom exact avec l'espace encodé (%20)
+        const modelURL = './assets/Abandoned%20House.glb'; 
 
-            // Cacher l'overlay et afficher le HUD
+        loader.load(modelURL, (gltf) => {
+            playerModelTemplate = gltf.scene;
+            // On réduit la taille de la maison pour qu'elle ne soit pas géante sur les joueurs
+            playerModelTemplate.scale.set(0.1, 0.1, 0.1); 
+            document.getElementById('loading-text').innerText = "Maison prête !";
+        }, undefined, (error) => {
+            console.error("Erreur de chargement. Vérifie le nom du fichier sur GitHub.");
+            document.getElementById('loading-text').innerText = "Erreur : Fichier non trouvé";
+        });
+
+        document.getElementById('btn-play').addEventListener('click', () => {
+            document.body.requestPointerLock();
             document.getElementById('overlay').style.display = 'none';
             document.getElementById('hud').style.display = 'block';
             document.getElementById('weapon-slot').style.display = 'flex';
-
-            if(!isReady) {
-                initGame();
-                isReady = true;
-            }
+            if(!isReady) { initGame(); isReady = true; }
         });
 
-        // --- CRÉATION DU PERSONNAGE "BEAN" ---
-        function createCharacterMesh(color) {
-            const group = new THREE.Group();
-            
-            // Corps (Capsule colorée)
-            const body = new THREE.Mesh(
-                new THREE.CapsuleGeometry(0.35, 0.7, 8, 16),
-                new THREE.MeshLambertMaterial({ color: color })
-            );
-            body.position.y = 0.5;
-            group.add(body);
-
-            // Tête (Peau)
-            const head = new THREE.Mesh(
-                new THREE.SphereGeometry(0.35, 20, 20),
-                new THREE.MeshLambertMaterial({ color: 0xffdbac })
-            );
-            head.position.y = 1.25;
-            group.add(head);
-
-            // Yeux noirs
-            const eyeGeo = new THREE.SphereGeometry(0.05, 8, 8);
-            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-            const e1 = new THREE.Mesh(eyeGeo, eyeMat); e1.position.set(0.12, 1.35, 0.28); group.add(e1);
-            const e2 = new THREE.Mesh(eyeGeo, eyeMat); e2.position.set(-0.12, 1.35, 0.28); group.add(e2);
-
-            return group;
+        function createPlayerObject() {
+            if (playerModelTemplate) {
+                return playerModelTemplate.clone();
+            } else {
+                // Si le modèle n'est pas chargé, on met un cube rouge par défaut
+                return new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({color: 0xff0000}));
+            }
         }
 
         function initGame() {
@@ -96,59 +79,19 @@
             renderer.setPixelRatio(window.devicePixelRatio);
             document.body.appendChild(renderer.domElement);
 
-            // Lumières comme sur l'image
-            scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
             const sun = new THREE.DirectionalLight(0xffffff, 0.6);
             sun.position.set(20, 60, 20);
             scene.add(sun);
 
-            // --- DÉCOR DU QUARTIER ---
-            // Herbe
+            // Sol
             const grass = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshLambertMaterial({color: 0x7cfc00}));
-            grass.rotation.x = -Math.PI / 2;
-            scene.add(grass);
+            grass.rotation.x = -Math.PI/2; scene.add(grass);
 
-            // Route
             const road = new THREE.Mesh(new THREE.PlaneGeometry(16, 600), new THREE.MeshLambertMaterial({color: 0x444444}));
-            road.rotation.x = -Math.PI / 2; road.position.y = 0.01;
-            scene.add(road);
+            road.rotation.x = -Math.PI/2; road.position.y = 0.01; scene.add(road);
 
-            // Trottoirs
-            const tMat = new THREE.MeshLambertMaterial({color: 0xcccccc});
-            const tL = new THREE.Mesh(new THREE.PlaneGeometry(5, 600), tMat);
-            tL.rotation.x = -Math.PI/2; tL.position.set(-10.5, 0.02, 0); scene.add(tL);
-            const tR = new THREE.Mesh(new THREE.PlaneGeometry(5, 600), tMat);
-            tR.rotation.x = -Math.PI/2; tR.position.set(10.5, 0.02, 0); scene.add(tR);
-
-            // Génération Maisons et Arbres
-            const colors = [0xff4757, 0x1e90ff, 0x2ed573, 0xffa502];
-            for(let i = -4; i <= 4; i++) {
-                if(i === 0) continue;
-                const side = (i % 2 === 0) ? 1 : -1;
-                const x = side * 22;
-                const z = i * 35;
-
-                // Maison
-                const house = new THREE.Group();
-                const body = new THREE.Mesh(new THREE.BoxGeometry(10, 8, 10), new THREE.MeshLambertMaterial({color: 0xffffff}));
-                body.position.y = 4; house.add(body);
-                const roof = new THREE.Mesh(new THREE.ConeGeometry(9, 6, 4), new THREE.MeshLambertMaterial({color: colors[Math.abs(i)%4]}));
-                roof.position.y = 11; roof.rotation.y = Math.PI/4; house.add(roof);
-                house.position.set(x, 0, z);
-                scene.add(house);
-                colliders.push(new THREE.Box3().setFromObject(body));
-
-                // Arbre
-                const tree = new THREE.Group();
-                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 4), new THREE.MeshLambertMaterial({color: 0x5d4037}));
-                trunk.position.y = 2; tree.add(trunk);
-                const leaves = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 8), new THREE.MeshLambertMaterial({color: 0x228b22}));
-                leaves.position.y = 5.5; tree.add(leaves);
-                tree.position.set(x - (side * 8), 0, z + 8);
-                scene.add(tree);
-            }
-
-            // --- RÉSEAU ---
+            // RÉSEAU
             socket = io("https://murder-mystery-x.onrender.com");
             socket.on("currentPlayers", (ps) => {
                 players = ps;
@@ -158,10 +101,11 @@
                     document.getElementById('weapon-icon').innerText = me.role === 'murderer' ? "🔪" : (me.role === 'sheriff' ? "🔫" : "✋");
                 }
             });
+
             socket.on("playerMoved", (p) => {
                 if(p.id === socket.id) return;
                 if(!playerMeshes[p.id] && p.alive) {
-                    playerMeshes[p.id] = createCharacterMesh(0x2e86de);
+                    playerMeshes[p.id] = createPlayerObject();
                     scene.add(playerMeshes[p.id]);
                 }
                 if(playerMeshes[p.id]) {
@@ -178,7 +122,7 @@
             const time = performance.now();
             const delta = (time - prevTime) / 1000;
 
-            if(isReady) {
+            if(isReady && document.pointerLockElement) {
                 const oldPos = camera.position.clone();
                 const speed = 15 * delta;
                 
@@ -187,32 +131,20 @@
                 if(keys['KeyA']) camera.translateX(-speed);
                 if(keys['KeyD']) camera.translateX(speed);
 
-                // Gravité
                 velocity.y -= 35 * delta;
                 camera.position.y += velocity.y * delta;
                 if(camera.position.y < 1.6) { camera.position.y = 1.6; velocity.y = 0; canJump = true; }
-
-                // Collisions
-                const pBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(1.8, 2, 1.8));
-                for(let b of colliders) { if(pBox.intersectsBox(b)) { camera.position.copy(oldPos); break; } }
                 
-                if(socket && socket.connected) {
-                    socket.emit('playerMovement', { x: camera.position.x, z: camera.position.z, ry: camera.rotation.y });
-                }
+                socket.emit('playerMovement', { x: camera.position.x, z: camera.position.z, ry: camera.rotation.y });
             }
             if(renderer) renderer.render(scene, camera);
             prevTime = time;
         }
 
-        window.addEventListener('keydown', (e) => {
-            keys[e.code] = true;
-            if(e.code === 'Space' && canJump) { velocity.y = 13; canJump = false; }
-        });
+        window.addEventListener('keydown', (e) => { keys[e.code] = true; if(e.code === 'Space' && canJump) { velocity.y = 13; canJump = false; } });
         window.addEventListener('keyup', (e) => keys[e.code] = false);
-        document.addEventListener('mousemove', (e) => {
-            if(document.pointerLockElement || isReady) camera.rotation.y -= e.movementX * 0.002;
-        });
-        document.addEventListener('mousedown', () => { if(isReady && socket) socket.emit('attack'); });
+        document.addEventListener('mousemove', (e) => { if(document.pointerLockElement) camera.rotation.y -= e.movementX * 0.002; });
+        document.addEventListener('mousedown', () => { if(isReady) socket.emit('attack'); });
     </script>
 </body>
 </html>
