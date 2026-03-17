@@ -2,20 +2,40 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>MMX - QUARTIER DÉTAILLÉ</title>
+    <title>MMX - VERSION PRO</title>
     <style>
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: 'Segoe UI', sans-serif; }
-        #hud { position: absolute; top: 20px; left: 20px; color: #111; font-size: 22px; font-weight: bold; background: rgba(255,255,255,0.8); padding: 12px; border: 2px solid #333; border-radius: 8px; z-index: 10; pointer-events: none; }
+        
+        /* HUD & INTERFACE */
+        #hud { position: absolute; top: 20px; left: 20px; color: #111; font-size: 20px; font-weight: bold; background: rgba(255,255,255,0.8); padding: 10px; border-radius: 8px; z-index: 10; pointer-events: none; }
         #crosshair { position: absolute; top: 50%; left: 50%; width: 14px; height: 14px; border: 2px solid #000; border-radius: 50%; transform: translate(-50%, -50%); z-index: 5; pointer-events: none; }
+        
+        /* ARME EN BAS AU MILIEU */
+        #weapon-slot { 
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            width: 80px; height: 80px; background: rgba(0,0,0,0.6); border: 3px solid #fff;
+            border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 40px;
+        }
+
+        #spectator-ui { 
+            position: absolute; top: 20px; width: 100%; text-align: center; 
+            color: white; font-size: 24px; font-weight: bold; text-shadow: 2px 2px 4px #000;
+            display: none; pointer-events: none;
+        }
+
         #overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #87CEEB; z-index: 100; cursor: pointer; }
-        #btn-play { padding: 25px 50px; font-size: 28px; font-weight: bold; color: white; background: #2ecc71; border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 8px 0 #27ae60; }
-        #btn-play:active { transform: translateY(4px); box-shadow: 0 4px 0 #27ae60; }
+        #btn-play { padding: 25px 50px; font-size: 28px; font-weight: bold; color: white; background: #2ecc71; border: none; border-radius: 50px; cursor: pointer; }
     </style>
 </head>
 <body>
 
     <div id="hud">Rôle : Assignation...</div>
+    <div id="spectator-ui">MODE SPECTATEUR - Vous êtes mort</div>
     <div id="crosshair"></div>
+    
+    <div id="weapon-slot" title="Votre Arme">
+        <span id="weapon-icon">❔</span>
+    </div>
 
     <div id="overlay">
         <button id="btn-play">DÉMARRER LA PARTIE</button>
@@ -26,8 +46,13 @@
 
     <script>
         let socket, scene, camera, renderer, isReady = false;
-        let players = {}, playerMeshes = {}, colliders = [];
+        let players = {}, playerMeshes = {}, houseBoxes = [];
         const keys = {};
+        
+        // Physique
+        let velocity = new THREE.Vector3();
+        let canJump = false;
+        let isSpectator = false;
         let prevTime = performance.now();
 
         document.getElementById('btn-play').addEventListener('click', () => {
@@ -47,97 +72,66 @@
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
             document.body.appendChild(renderer.domElement);
 
-            // LUMIÈRES
             scene.add(new THREE.AmbientLight(0xffffff, 0.9));
-            const sun = new THREE.DirectionalLight(0xffffff, 0.5);
-            sun.position.set(10, 50, 10);
-            scene.add(sun);
 
-            // --- SOL (HERBE ET ROUTE) ---
-            const world = new THREE.Group();
+            // SOL
             const grass = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), new THREE.MeshLambertMaterial({color: 0x567d46}));
             grass.rotation.x = -Math.PI / 2;
-            world.add(grass);
+            scene.add(grass);
 
-            // Route avec lignes blanches
-            const road = new THREE.Mesh(new THREE.PlaneGeometry(15, 300), new THREE.MeshLambertMaterial({color: 0x333333}));
-            road.rotation.x = -Math.PI / 2;
-            road.position.y = 0.02;
-            world.add(road);
+            // ROUTE
+            const road = new THREE.Mesh(new THREE.PlaneGeometry(16, 300), new THREE.MeshLambertMaterial({color: 0x333333}));
+            road.rotation.x = -Math.PI / 2; road.position.y = 0.01;
+            scene.add(road);
 
-            const lineGeo = new THREE.PlaneGeometry(0.5, 4);
-            const lineMat = new THREE.MeshLambertMaterial({color: 0xffffff});
-            for(let i = -30; i < 30; i++) {
-                const line = new THREE.Mesh(lineGeo, lineMat);
-                line.rotation.x = -Math.PI / 2;
-                line.position.set(0, 0.05, i * 8);
-                world.add(line);
-            }
-            scene.add(world);
-
-            // --- FONCTION MAISON DÉTAILLÉE ---
-            function createHouse(x, z, color) {
+            // MAISONS
+            function createHouse(x, z) {
                 const house = new THREE.Group();
-                
-                // Murs
-                const body = new THREE.Mesh(new THREE.BoxGeometry(7, 6, 7), new THREE.MeshLambertMaterial({color: 0xffffff}));
-                body.position.y = 3;
+                const body = new THREE.Mesh(new THREE.BoxGeometry(8, 7, 8), new THREE.MeshLambertMaterial({color: 0xffffff}));
+                body.position.y = 3.5;
                 house.add(body);
-
-                // Toit
-                const roof = new THREE.Mesh(new THREE.ConeGeometry(6, 4, 4), new THREE.MeshLambertMaterial({color: color}));
-                roof.position.y = 8;
-                roof.rotation.y = Math.PI / 4;
+                const roof = new THREE.Mesh(new THREE.ConeGeometry(7, 5, 4), new THREE.MeshLambertMaterial({color: 0xaa2222}));
+                roof.position.y = 9; roof.rotation.y = Math.PI / 4;
                 house.add(roof);
-
-                // Fenêtres (petits cubes noirs)
-                const winGeo = new THREE.BoxGeometry(1, 1.2, 0.1);
-                const winMat = new THREE.MeshLambertMaterial({color: 0x333333});
-                const w1 = new THREE.Mesh(winGeo, winMat); w1.position.set(-1.5, 4, 3.51); house.add(w1);
-                const w2 = new THREE.Mesh(winGeo, winMat); w2.position.set(1.5, 4, 3.51); house.add(w2);
-
-                // Porte
-                const door = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.5, 0.1), new THREE.MeshLambertMaterial({color: 0x5d4037}));
-                door.position.set(0, 1.25, 3.51);
-                house.add(door);
-
-                // Clôture (Barrière)
-                const fence = new THREE.Mesh(new THREE.BoxGeometry(10, 1, 10), new THREE.MeshLambertMaterial({color: 0xffffff, wireframe: true}));
-                fence.position.y = 0.5;
-                house.add(fence);
-
                 house.position.set(x, 0, z);
                 scene.add(house);
-                colliders.push(new THREE.Box3().setFromObject(body));
+
+                // Collision Box
+                const box = new THREE.Box3().setFromObject(body);
+                houseBoxes.push(box);
             }
 
-            // Génération du quartier
-            const colors = [0xff4444, 0x4444ff, 0xffcc00, 0xff8800];
-            for(let i = -4; i <= 4; i++) {
-                if(i === 0) continue;
-                createHouse(-15, i * 20, colors[Math.abs(i)%4]);
-                createHouse(15, i * 20, colors[Math.abs(i)%4]);
+            for(let i = -3; i <= 3; i++) {
+                if(i !== 0) { createHouse(-18, i * 25); createHouse(18, i * 25); }
             }
 
             // RÉSEAU
             try {
                 socket = io("https://murder-mystery-x.onrender.com");
                 socket.emit('joinGame', "Joueur-" + Math.floor(Math.random()*99));
+                
                 socket.on('currentPlayers', (p) => {
                     players = p;
-                    if(players[socket.id]) document.getElementById('hud').innerText = "Rôle : " + players[socket.id].role.toUpperCase();
-                });
-                socket.on('playerMoved', (p) => {
-                    if(p.id !== socket.id && p.alive) {
-                        if(!playerMeshes[p.id]) {
-                            playerMeshes[p.id] = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1.2), new THREE.MeshLambertMaterial({color: 0x0000ff}));
-                            scene.add(playerMeshes[p.id]);
-                        }
-                        playerMeshes[p.id].position.set(p.x, 1.1, p.z);
+                    const me = players[socket.id];
+                    if(me) {
+                        document.getElementById('hud').innerText = "Rôle : " + me.role.toUpperCase();
+                        // Mise à jour icône arme
+                        const icon = document.getElementById('weapon-icon');
+                        if(me.role === 'murderer') icon.innerText = "🔪";
+                        else if(me.role === 'sheriff') icon.innerText = "🔫";
+                        else icon.innerText = "✋";
                     }
+                });
+
+                socket.on('playerKilled', (id) => {
+                    if(id === socket.id) {
+                        isSpectator = true;
+                        document.getElementById('spectator-ui').style.display = 'block';
+                        document.getElementById('weapon-slot').style.display = 'none';
+                    }
+                    if(playerMeshes[id]) { scene.remove(playerMeshes[id]); delete playerMeshes[id]; }
                 });
             } catch(e) {}
 
@@ -150,30 +144,61 @@
             const delta = (time - prevTime) / 1000;
 
             if(isReady && document.pointerLockElement) {
+                const speed = isSpectator ? 20 : 12;
+                
+                // Mouvement de base
                 const oldPos = camera.position.clone();
-                const speed = 13 * delta;
+                
+                if (keys['KeyW']) camera.translateZ(-speed * delta);
+                if (keys['KeyS']) camera.translateZ(speed * delta);
+                if (keys['KeyA']) camera.translateX(-speed * delta);
+                if (keys['KeyD']) camera.translateX(speed * delta);
 
-                if(keys['KeyW']) camera.translateZ(-speed);
-                if(keys['KeyS']) camera.translateZ(speed);
-                if(keys['KeyA']) camera.translateX(-speed);
-                if(keys['KeyD']) camera.translateX(speed);
+                // SAUT ET GRAVITÉ (Si pas spectateur)
+                if(!isSpectator) {
+                    velocity.y -= 30.0 * delta; // Gravité
+                    camera.position.y += velocity.y * delta;
 
-                camera.position.y = 1.6;
+                    if (camera.position.y < 1.6) {
+                        velocity.y = 0;
+                        camera.position.y = 1.6;
+                        canJump = true;
+                    }
 
-                const pBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(1, 1, 1));
-                for(let box of colliders) {
-                    if(pBox.intersectsBox(box)) { camera.position.copy(oldPos); break; }
+                    // COLLISIONS MAISONS
+                    const pBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(1.2, 2, 1.2));
+                    for(let box of houseBoxes) {
+                        if(pBox.intersectsBox(box)) {
+                            camera.position.x = oldPos.x;
+                            camera.position.z = oldPos.z;
+                            break;
+                        }
+                    }
+                } else {
+                    // Mode Spectateur : Vol libre
+                    if(keys['Space']) camera.position.y += speed * delta;
+                    if(keys['ShiftLeft']) camera.position.y -= speed * delta;
                 }
 
-                if(socket) socket.emit('playerMovement', { x: camera.position.x, z: camera.position.z, ry: camera.rotation.y });
+                if(socket && !isSpectator) {
+                    socket.emit('playerMovement', { x: camera.position.x, z: camera.position.z, ry: camera.rotation.y });
+                }
             }
             if(renderer) renderer.render(scene, camera);
             prevTime = time;
         }
 
-        document.addEventListener('mousemove', (e) => { if(document.pointerLockElement) camera.rotation.y -= e.movementX * 0.002; });
-        window.addEventListener('keydown', (e) => keys[e.code] = true);
+        // ÉCOUTEURS
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if (e.code === 'Space' && canJump && !isSpectator) {
+                velocity.y += 12;
+                canJump = false;
+            }
+        });
         window.addEventListener('keyup', (e) => keys[e.code] = false);
+        document.addEventListener('mousemove', (e) => { if(document.pointerLockElement) camera.rotation.y -= e.movementX * 0.002; });
+        document.addEventListener('mousedown', (e) => { if(isReady && socket && !isSpectator && e.button === 0) socket.emit('attack'); });
     </script>
 </body>
 </html>
