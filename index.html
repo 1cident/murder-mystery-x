@@ -6,156 +6,78 @@
     <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Special+Elite&display=swap" rel="stylesheet">
     <style>
         body { margin: 0; background: #0f0f0f; color: #d4af37; font-family: 'Special Elite', cursive; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        
-        /* Interface Utilisateur */
-        #game-ui { position: absolute; border: 3px solid #d4af37; padding: 40px; background: rgba(20, 20, 20, 0.95); box-shadow: 0 0 30px rgba(212, 175, 55, 0.2); text-align: center; width: 350px; z-index: 10; }
-        h1 { font-family: 'Bangers', cursive; font-size: 2.5em; margin-bottom: 20px; text-shadow: 2px 2px #000; }
-        input { width: 90%; padding: 10px; margin: 5px 0; background: #000; border: 1px solid #d4af37; color: #d4af37; font-family: 'Special Elite'; }
-        button { display: block; width: 100%; padding: 10px; margin: 10px 0; background: transparent; border: 2px solid #d4af37; color: #d4af37; cursor: pointer; font-family: 'Special Elite'; font-weight: bold; transition: 0.3s; }
-        button:hover { background: #d4af37; color: #000; }
-        
-        #main-menu, #params-menu { display: none; }
-
-        /* Zone de jeu (Canvas) */
+        #game-ui { position: absolute; border: 3px solid #d4af37; padding: 40px; background: rgba(20, 20, 20, 0.95); text-align: center; width: 350px; z-index: 10; }
+        button { display: block; width: 100%; padding: 10px; margin: 10px 0; background: transparent; border: 2px solid #d4af37; color: #d4af37; cursor: pointer; font-family: 'Special Elite'; font-weight: bold; }
         canvas { display: none; background: #050505; }
     </style>
 </head>
 <body>
 
 <div id="game-ui">
-    <div id="auth-menu">
+    <div id="menu">
         <h1>MURDER MYSTERY X</h1>
-        <input type="text" id="username" placeholder="Pseudo">
-        <input type="password" id="password" placeholder="Mot de passe">
-        <button onclick="login()">S'INSCRIRE / SE CONNECTER</button>
-    </div>
-
-    <div id="main-menu">
-        <h1>BIENVENUE</h1>
-        <button onclick="startGame()">COMMENCER À JOUER</button>
-        <button onclick="toggleParams()">PARAMÈTRES</button>
-    </div>
-    
-    <div id="params-menu">
-        <h1>PARAMÈTRES</h1>
-        <p>Sensibilité : <input type="range" min="1" max="10" value="5"></p>
-        <button onclick="toggleParams()">RETOUR</button>
+        <button onclick="startGame()">REJOINDRE LA PARTIE</button>
     </div>
 </div>
 
 <canvas id="gameCanvas"></canvas>
 
-<script src="https://murder-mystery-x.onrender.com/socket.io/socket.io.js"></script>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
 <script>
-    // --- INITIALISATION SOCKET ---
-    // Connexion explicite à ton URL Render
-    let socket;
-    try { 
-        socket = io("https://murder-mystery-x.onrender.com"); 
-        
-        socket.on('connect', () => {
-            console.log("Connecté au serveur Render !");
-        });
-
-        socket.on('connect_error', () => {
-            console.warn("Le serveur Render démarre... (Plan gratuit)");
-        });
-    } catch(e) {
-        console.error("Erreur de connexion :", e);
-    }
-
+    // REMPLACE BIEN PAR TON URL RENDER CI-DESSOUS
+    const socket = io("https://murder-mystery-x.onrender.com");
+    
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     let gameRunning = false;
-
-    // Propriétés du joueur
-    const player = {
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
-        size: 20,
-        speed: 5,
-        color: '#d4af37'
-    };
-
+    let players = {}; 
+    const myPlayer = { x: 400, y: 300, size: 20, speed: 5, color: '#d4af37' };
     const keys = {};
 
-    // --- NAVIGATION MENUS ---
-    function login() {
-        document.getElementById('auth-menu').style.display = 'none';
-        document.getElementById('main-menu').style.display = 'block';
-    }
+    socket.on('currentPlayers', (serverPlayers) => { players = serverPlayers; });
+    socket.on('newPlayer', (playerInfo) => { players[playerInfo.id] = playerInfo; });
+    socket.on('playerMoved', (p) => { players[p.id] = p; });
+    socket.on('playerDisconnected', (id) => { delete players[id]; });
 
-    function toggleParams() {
-        const main = document.getElementById('main-menu');
-        const params = document.getElementById('params-menu');
-        if (main.style.display === 'none') {
-            main.style.display = 'block';
-            params.style.display = 'none';
-        } else {
-            main.style.display = 'none';
-            params.style.display = 'block';
-        }
-    }
-
-    // --- LANCEMENT DU JEU ---
     function startGame() {
         document.getElementById('game-ui').style.display = 'none';
         canvas.style.display = 'block';
-        
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        
         gameRunning = true;
         gameLoop();
     }
 
-    // --- CONTRÔLES ---
-    window.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; });
-    window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+    window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+    window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-    // --- BOUCLE DE JEU ---
     function update() {
         let moved = false;
-        if (keys['z'] || keys['arrowup']) { player.y -= player.speed; moved = true; }
-        if (keys['s'] || keys['arrowdown']) { player.y += player.speed; moved = true; }
-        if (keys['q'] || keys['arrowleft']) { player.x -= player.speed; moved = true; }
-        if (keys['d'] || keys['arrowright']) { player.x += player.speed; moved = true; }
+        if (keys['z'] || keys['arrowup']) { myPlayer.y -= myPlayer.speed; moved = true; }
+        if (keys['s'] || keys['arrowdown']) { myPlayer.y += myPlayer.speed; moved = true; }
+        if (keys['q'] || keys['arrowleft']) { myPlayer.x -= myPlayer.speed; moved = true; }
+        if (keys['d'] || keys['arrowright']) { myPlayer.x += myPlayer.speed; moved = true; }
 
-        // Limites de l'écran
-        if (player.x < 10) player.x = 10;
-        if (player.y < 10) player.y = 10;
-        if (player.x > canvas.width - 10) player.x = canvas.width - 10;
-        if (player.y > canvas.height - 10) player.y = canvas.height - 10;
-
-        // Envoi de la position au serveur si on bouge et que le socket est prêt
-        if (moved && socket && socket.connected) {
-            socket.emit('playerMovement', { x: player.x, y: player.y });
+        if (moved) {
+            socket.emit('playerMovement', { x: myPlayer.x, y: myPlayer.y });
         }
     }
 
     function draw() {
-        ctx.fillStyle = "#0a0a0a";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Autres joueurs
+        Object.keys(players).forEach((id) => {
+            if (id !== socket.id) {
+                ctx.fillStyle = players[id].color;
+                ctx.fillRect(players[id].x - 10, players[id].y - 10, 20, 20);
+            }
+        });
 
-        ctx.strokeStyle = "#1a1a1a";
-        ctx.lineWidth = 1;
-        for(let x=0; x<canvas.width; x+=50) {
-            ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x, canvas.height); ctx.stroke();
-        }
-        for(let y=0; y<canvas.height; y+=50) {
-            ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width, y); ctx.stroke();
-        }
-
-        ctx.fillStyle = player.color;
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = player.color;
-        ctx.fillRect(player.x - player.size/2, player.y - player.size/2, player.size, player.size);
-        ctx.shadowBlur = 0;
-
-        ctx.fillStyle = "#d4af37";
-        ctx.font = "16px Special Elite";
-        ctx.fillText("ZQSD pour bouger | Serveur: " + (socket && socket.connected ? "En ligne" : "Connexion..."), 20, 30);
+        // Mon joueur
+        ctx.fillStyle = myPlayer.color;
+        ctx.fillRect(myPlayer.x - 10, myPlayer.y - 10, 20, 20);
     }
 
     function gameLoop() {
@@ -164,11 +86,6 @@
         draw();
         requestAnimationFrame(gameLoop);
     }
-
-    window.addEventListener('resize', () => {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    });
 </script>
 </body>
 </html>
