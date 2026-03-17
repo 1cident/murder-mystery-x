@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Murder Mystery X - Fix Visuel</title>
+    <title>MMX - Force Render</title>
     <style>
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: sans-serif; }
         #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #87CEEB; z-index: 1000; }
@@ -13,7 +13,7 @@
 <body>
 
     <div id="overlay">
-        <div id="status">Chargement de la maison (22 Mo)...</div>
+        <div id="status">Chargement...</div>
         <button id="btn-play">JOUER</button>
     </div>
 
@@ -23,17 +23,25 @@
     <script>
         let scene, camera, renderer, model;
 
-        // 1. CHARGEMENT
         const loader = new THREE.GLTFLoader();
         loader.load('./maison.glb', (gltf) => {
             model = gltf.scene;
-            
-            // On centre le modèle pour éviter qu'il soit n'importe où
+
+            // --- MAGIE : REDIMENSIONNEMENT AUTOMATIQUE ---
             const box = new THREE.Box3().setFromObject(model);
-            const center = box.getCenter(new THREE.Vector3());
-            model.position.sub(center); 
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const scale = 10 / maxDim; // On force la maison à faire 10 unités de large
+            model.scale.set(scale, scale, scale);
             
-            document.getElementById('status').innerText = "✅ Maison prête !";
+            // On la centre
+            const center = box.getCenter(new THREE.Vector3());
+            model.position.x = -center.x * scale;
+            model.position.y = -center.y * scale;
+            model.position.z = -center.z * scale;
+            model.position.y += 5; // On la pose sur le sol
+
+            document.getElementById('status').innerText = "✅ Maison calibrée !";
             document.getElementById('btn-play').style.display = "block";
         }, 
         (xhr) => {
@@ -41,7 +49,7 @@
             document.getElementById('status').innerText = "Téléchargement : " + p + "%";
         },
         (err) => {
-            document.getElementById('status').innerText = "❌ Erreur de fichier";
+            document.getElementById('status').innerText = "❌ Erreur : Fichier introuvable";
         });
 
         document.getElementById('btn-play').addEventListener('click', () => {
@@ -53,39 +61,29 @@
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x87CEEB);
             
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 5000);
-            // On se met très loin pour être sûr de voir la maison (qui fait 22Mo)
-            camera.position.set(0, 50, 150); 
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 10, 25); // On se met à une distance raisonnable
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            // Lumières puissantes
-            scene.add(new THREE.AmbientLight(0xffffff, 1.5));
-            const sun = new THREE.DirectionalLight(0xffffff, 1);
-            sun.position.set(100, 200, 100);
-            scene.add(sun);
+            scene.add(new THREE.AmbientLight(0xffffff, 2)); // Lumière très forte
 
-            // Un sol très grand
             const floor = new THREE.Mesh(
-                new THREE.PlaneGeometry(2000, 2000),
+                new THREE.PlaneGeometry(200, 200),
                 new THREE.MeshLambertMaterial({ color: 0x7cfc00 })
             );
             floor.rotation.x = -Math.PI / 2;
             scene.add(floor);
 
-            if(model) {
-                scene.add(model);
-                camera.lookAt(model.position); // La caméra fixe la maison !
-            }
-
+            if(model) scene.add(model);
             animate();
         }
 
         function animate() {
             requestAnimationFrame(animate);
-            if(model) model.rotation.y += 0.005; // La maison tourne pour qu'on la repère
+            if(model) model.rotation.y += 0.01;
             renderer.render(scene, camera);
         }
     </script>
