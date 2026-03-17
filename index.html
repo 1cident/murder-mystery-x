@@ -2,24 +2,21 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Murder Mystery X - Fix 404</title>
+    <title>Murder Mystery X - Fix Final</title>
     <style>
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: sans-serif; }
         #hud { position: absolute; top: 20px; left: 20px; color: #333; font-size: 20px; font-weight: bold; background: white; padding: 10px; border-radius: 10px; border: 3px solid #000; z-index: 10; display: none; }
-        #weapon-slot { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 80px; height: 80px; background: #222; border: 4px solid #fff; border-radius: 15px; display: none; align-items: center; justify-content: center; font-size: 40px; z-index: 10; }
         #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #87CEEB; z-index: 1000; }
         #btn-play { padding: 20px 60px; font-size: 30px; font-weight: bold; color: white; background: #ff4757; border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 8px 0 #cc0000; }
-        #status { margin-top: 15px; color: white; font-weight: bold; text-align: center; }
+        #status { margin-top: 15px; color: white; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div id="hud">Rôle : Assignation...</div>
-    <div id="weapon-slot"><span id="weapon-icon">✋</span></div>
-    
     <div id="overlay">
         <button id="btn-play">JOUER</button>
-        <div id="status">Chargement du modèle...</div>
+        <div id="status">En attente d'un vrai fichier maison.glb...</div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -28,84 +25,57 @@
 
     <script>
         let socket, scene, camera, renderer, isReady = false;
-        let players = {}, playerMeshes = {}, colliders = [];
         let playerModelTemplate = null;
-        const keys = {};
-        let velocity = new THREE.Vector3(), canJump = false, prevTime = performance.now();
+        let playerMeshes = {};
 
-        // --- LIEN SIMPLIFIÉ ---
+        // On cherche le fichier au même endroit que l'index.html
         const modelURL = './maison.glb'; 
 
         const loader = new THREE.GLTFLoader();
         loader.load(modelURL, (gltf) => {
             playerModelTemplate = gltf.scene;
-            // On ajuste la taille (les maisons sont souvent énormes)
-            playerModelTemplate.scale.set(0.05, 0.05, 0.05); 
-            document.getElementById('status').innerText = "Maison chargée ! Cliquez sur JOUER.";
+            playerModelTemplate.scale.set(0.1, 0.1, 0.1); 
+            document.getElementById('status').innerText = "Modèle 3D prêt !";
         }, undefined, (err) => {
-            console.error("Le fichier maison.glb est introuvable (404)");
-            document.getElementById('status').innerText = "Erreur 404 : Renommez votre fichier en 'maison.glb' sur GitHub.";
+            document.getElementById('status').innerText = "Erreur : Le fichier maison.glb est vide ou illisible.";
         });
 
         document.getElementById('btn-play').addEventListener('click', () => {
             document.body.requestPointerLock();
             document.getElementById('overlay').style.display = 'none';
             document.getElementById('hud').style.display = 'block';
-            document.getElementById('weapon-slot').style.display = 'flex';
             if(!isReady) { initGame(); isReady = true; }
         });
-
-        function createPlayerObject() {
-            if (playerModelTemplate) {
-                return playerModelTemplate.clone();
-            } else {
-                // Secours visuel si le chargement échoue
-                const box = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({color: 0xff4757}));
-                box.position.y = 0.5;
-                return box;
-            }
-        }
 
         function initGame() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x87CEEB);
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 1.6, 10);
+            camera.position.set(0, 5, 15);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-            const sun = new THREE.DirectionalLight(0xffffff, 0.6);
-            sun.position.set(10, 50, 10);
-            scene.add(sun);
+            scene.add(new THREE.AmbientLight(0xffffff, 1));
+            
+            const grass = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshLambertMaterial({color: 0x7cfc00}));
+            grass.rotation.x = -Math.PI/2;
+            scene.add(grass);
 
-            // Sol simple
-            const grass = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshLambertMaterial({color: 0x7cfc00}));
-            grass.rotation.x = -Math.PI/2; scene.add(grass);
-
-            // Connexion serveur
             socket = io("https://murder-mystery-x.onrender.com");
             
-            socket.on("currentPlayers", (ps) => {
-                players = ps;
-                const me = players[socket.id];
-                if(me) {
-                    document.getElementById('hud').innerText = "Rôle : " + me.role.toUpperCase();
-                }
-            });
-
             socket.on("playerMoved", (p) => {
                 if(p.id === socket.id) return;
-                if(!playerMeshes[p.id] && p.alive) {
-                    playerMeshes[p.id] = createPlayerObject();
+                if(!playerMeshes[p.id]) {
+                    if(playerModelTemplate) {
+                        playerMeshes[p.id] = playerModelTemplate.clone();
+                    } else {
+                        playerMeshes[p.id] = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({color: 0xff0000}));
+                    }
                     scene.add(playerMeshes[p.id]);
                 }
-                if(playerMeshes[p.id]) {
-                    playerMeshes[p.id].position.set(p.x, 0, p.z);
-                    playerMeshes[p.id].rotation.y = p.ry || 0;
-                }
+                playerMeshes[p.id].position.set(p.x, 0, p.z);
             });
 
             animate();
@@ -113,29 +83,8 @@
 
         function animate() {
             requestAnimationFrame(animate);
-            const time = performance.now();
-            const delta = (time - prevTime) / 1000;
-
-            if(isReady && document.pointerLockElement) {
-                const speed = 15 * delta;
-                if(keys['KeyW']) camera.translateZ(-speed);
-                if(keys['KeyS']) camera.translateZ(speed);
-                if(keys['KeyA']) camera.translateX(-speed);
-                if(keys['KeyD']) camera.translateX(speed);
-
-                velocity.y -= 30 * delta;
-                camera.position.y += velocity.y * delta;
-                if(camera.position.y < 1.6) { camera.position.y = 1.6; velocity.y = 0; canJump = true; }
-                
-                socket.emit('playerMovement', { x: camera.position.x, z: camera.position.z, ry: camera.rotation.y });
-            }
             if(renderer) renderer.render(scene, camera);
-            prevTime = time;
         }
-
-        window.addEventListener('keydown', (e) => { keys[e.code] = true; if(e.code === 'Space' && canJump) { velocity.y = 12; canJump = false; } });
-        window.addEventListener('keyup', (e) => keys[e.code] = false);
-        document.addEventListener('mousemove', (e) => { if(document.pointerLockElement) camera.rotation.y -= e.movementX * 0.002; });
     </script>
 </body>
 </html>
