@@ -1,30 +1,26 @@
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
-const io = require('socket.io')(http, { cors: { origin: "*", methods: ["GET", "POST"] } });
+const io = require('socket.io')(http, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
 
 let players = {};
-let murdererId = null;
 
 io.on('connection', (socket) => {
     console.log('Joueur connecté : ' + socket.id);
 
-    // Création du joueur avec un rôle par défaut
+    // Création du joueur
     players[socket.id] = {
-        x: Math.random() * 600 + 100,
-        y: Math.random() * 400 + 100,
+        x: Math.random() * 500 + 50,
+        y: Math.random() * 400 + 50,
         id: socket.id,
-        role: 'Innocent',
-        color: '#d4af37', // Doré pour les innocents
+        role: Object.keys(players).length === 0 ? 'Murderer' : 'Innocent',
         alive: true
     };
-
-    // Si c'est le seul joueur, il devient le Murderer (pour le test)
-    // Dans une vraie partie, on lancerait un compte à rebours
-    if (Object.keys(players).length === 1) {
-        players[socket.id].role = 'Murderer';
-        murdererId = socket.id;
-    }
 
     socket.emit('currentPlayers', players);
     socket.broadcast.emit('newPlayer', players[socket.id]);
@@ -37,18 +33,15 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Logique d'attaque
     socket.on('attack', () => {
-        if (players[socket.id] && players[socket.id].role === 'Murderer' && players[socket.id].alive) {
-            socket.broadcast.emit('playerAttacking', socket.id);
-            
-            // Vérifier si un innocent est touché
-            Object.values(players).forEach(p => {
-                if (p.id !== socket.id && p.alive) {
-                    const dist = Math.hypot(p.x - players[socket.id].x, p.y - players[socket.id].y);
-                    if (dist < 40) { // Distance du coup de couteau
-                        p.alive = false;
-                        io.emit('playerKilled', p.id);
+        const attacker = players[socket.id];
+        if (attacker && attacker.role === 'Murderer' && attacker.alive) {
+            Object.values(players).forEach(victim => {
+                if (victim.id !== socket.id && victim.alive) {
+                    const dist = Math.hypot(victim.x - attacker.x, victim.y - attacker.y);
+                    if (dist < 50) {
+                        victim.alive = false;
+                        io.emit('playerKilled', victim.id);
                     }
                 }
             });
@@ -62,4 +55,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => { console.log(`Serveur sur port ${PORT}`); });
+http.listen(PORT, () => { console.log('Serveur prêt !'); });
