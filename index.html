@@ -2,20 +2,20 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>MMX - Vision Claire</title>
+    <title>MMX - Ultra Graphics</title>
     <style>
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: sans-serif; }
-        #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #87CEEB; z-index: 1000; color: white; }
-        #btn-play { padding: 15px 40px; font-size: 20px; cursor: pointer; display: none; background: #ff4757; color: white; border: none; border-radius: 8px; }
-        #status { margin-top: 10px; font-weight: bold; }
+        #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #1a1a1a; z-index: 1000; color: white; }
+        #btn-play { padding: 15px 40px; font-size: 20px; cursor: pointer; display: none; background: #ff4757; color: white; border: none; border-radius: 8px; font-weight: bold; }
+        #status { margin-top: 15px; color: #aaa; }
     </style>
 </head>
 <body>
 
     <div id="overlay">
-        <h1>MURDER MYSTERY X</h1>
-        <div id="status">Chargement de la maison...</div>
-        <button id="btn-play">JOUER</button>
+        <h1 style="letter-spacing: 3px;">MURDER MYSTERY X</h1>
+        <div id="status">Chargement des textures HD...</div>
+        <button id="btn-play">DÉMARRER LE JEU</button>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -25,27 +25,34 @@
         let scene, camera, renderer, mapModel;
         const keys = {};
         let velocityY = 0;
-        const groundLevel = -10; 
+        const groundLevel = -10;
 
         const loader = new THREE.GLTFLoader();
         loader.load('./maison.glb', (gltf) => {
             mapModel = gltf.scene;
 
-            // --- CORRECTION DE L'INCLINAISON ---
-            // Si ta maison est penchée, on force sa rotation à 0 sur les axes X et Z
-            mapModel.rotation.x = 0;
-            mapModel.rotation.z = 0;
-            // Si elle est toujours penchée, essaie : mapModel.rotation.x = Math.PI / 2; 
+            // --- AMÉLIORATION DES MATÉRIAUX ---
+            mapModel.traverse((node) => {
+                if (node.isMesh) {
+                    node.castShadow = true;
+                    node.receiveShadow = true;
+                    // On force le rendu des textures en haute qualité
+                    if(node.material.map) node.material.map.anisotropy = 16;
+                }
+            });
+
+            // Correction rotation si nécessaire
+            mapModel.rotation.set(0, 0, 0);
 
             const box = new THREE.Box3().setFromObject(mapModel);
             const size = box.getSize(new THREE.Vector3());
-            const scale = 100 / Math.max(size.x, size.z); 
+            const scale = 120 / Math.max(size.x, size.z); 
             mapModel.scale.set(scale, scale, scale);
             
             const center = box.getCenter(new THREE.Vector3());
             mapModel.position.set(-center.x * scale, groundLevel, -center.z * scale);
 
-            document.getElementById('status').innerText = "✅ Prêt !";
+            document.getElementById('status').innerText = "✅ Optimisation terminée";
             document.getElementById('btn-play').style.display = "block";
         });
 
@@ -57,30 +64,38 @@
 
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB); // Retour au CIEL BLEU clair
+            scene.background = new THREE.Color(0x87CEEB);
 
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
-            camera.position.set(0, groundLevel + 15, 30); 
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 3000);
+            camera.position.set(0, groundLevel + 10, 40);
 
-            renderer = new THREE.WebGLRenderer({ antialias: true });
+            // --- CONFIGURATION RENDU HAUTE QUALITÉ ---
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
             renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            
+            // Ces 3 lignes changent TOUT visuellement :
+            renderer.outputEncoding = THREE.sRGBEncoding; 
+            renderer.toneMapping = THREE.ReinhardToneMapping;
+            renderer.toneMappingExposure = 1.2; 
+
             document.body.appendChild(renderer.domElement);
 
-            // --- SUPER LUMINOSITÉ ---
-            const ambient = new THREE.AmbientLight(0xffffff, 1.5); // Lumière globale forte
+            // Lumières réalistes
+            const ambient = new THREE.AmbientLight(0xffffff, 0.8); 
             scene.add(ambient);
 
-            const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-            sun.position.set(50, 100, 50);
+            const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+            sun.position.set(100, 200, 100);
             scene.add(sun);
 
-            // Sol herbe claire
+            // Sol
             const floor = new THREE.Mesh(
                 new THREE.PlaneGeometry(2000, 2000),
-                new THREE.MeshLambertMaterial({ color: 0x7cfc00 })
+                new THREE.MeshStandardMaterial({ color: 0x55aa55, roughness: 0.8 })
             );
             floor.rotation.x = -Math.PI / 2;
-            floor.position.y = groundLevel - 0.1;
+            floor.position.y = groundLevel;
             scene.add(floor);
 
             if(mapModel) scene.add(mapModel);
@@ -92,14 +107,9 @@
 
         document.addEventListener('mousemove', (e) => {
             if (document.pointerLockElement) {
-                // Rotation gauche/droite (Y)
                 camera.rotation.y -= e.movementX * 0.002;
-                
-                // Rotation haut/bas (X) avec blocage pour ne pas se retourner
-                let newRotationX = camera.rotation.x - e.movementY * 0.002;
-                camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, newRotationX));
-                
-                // On force l'axe Z à 0 pour que la vue ne soit JAMAIS penchée
+                let newX = camera.rotation.x - e.movementY * 0.002;
+                camera.rotation.x = Math.max(-1.5, Math.min(1.5, newX));
                 camera.rotation.z = 0;
             }
         });
@@ -107,22 +117,20 @@
         function animate() {
             requestAnimationFrame(animate);
             if (document.pointerLockElement) {
-                const speed = 0.2;
+                const speed = 0.25;
                 if (keys['KeyW']) camera.translateZ(-speed);
                 if (keys['KeyS']) camera.translateZ(speed);
                 if (keys['KeyA']) camera.translateX(-speed);
                 if (keys['KeyD']) camera.translateX(speed);
 
-                // Gravité simple pour rester au sol
-                if (camera.position.y > groundLevel + 3) {
-                    velocityY -= 0.01;
+                // Gravité
+                if (camera.position.y > groundLevel + 4) {
+                    velocityY -= 0.015;
                 } else {
                     velocityY = 0;
-                    camera.position.y = groundLevel + 3;
+                    camera.position.y = groundLevel + 4;
                 }
                 camera.position.y += velocityY;
-                
-                // Sécurité anti-inclinaison de la caméra
                 camera.rotation.z = 0;
             }
             renderer.render(scene, camera);
