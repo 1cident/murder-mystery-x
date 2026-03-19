@@ -2,108 +2,103 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>MMX - Maison Statique</title>
+    <title>MMX - Exploration Map</title>
     <style>
         body { margin: 0; overflow: hidden; background: #00BFFF; font-family: sans-serif; }
         #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #00BFFF; z-index: 1000; }
         #status { color: white; font-weight: bold; font-size: 20px; text-shadow: 2px 2px black; }
         #btn-play { padding: 15px 40px; font-size: 24px; cursor: pointer; display: none; margin-top: 20px; background: #ff4757; color: white; border: none; border-radius: 10px; box-shadow: 0 5px 0 #b30000; }
+        #instructions { position: absolute; bottom: 20px; left: 20px; color: white; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; pointer-events: none; }
     </style>
 </head>
 <body>
 
     <div id="overlay">
-        <div id="status">Chargement de la zone...</div>
-        <button id="btn-play">COMMENCER</button>
+        <div id="status">Chargement de la carte (22 Mo)...</div>
+        <button id="btn-play">APPARAÎTRE SUR LA CARTE</button>
     </div>
+
+    <div id="instructions">Touches : ZQSD pour marcher | Souris pour regarder</div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
     <script>
-        let scene, camera, renderer, maison;
+        let scene, camera, renderer, mapModel;
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        const keys = {};
 
+        // 1. CHARGEMENT DE LA MAP
         const loader = new THREE.GLTFLoader();
         loader.load('./maison.glb', (gltf) => {
-            maison = gltf.scene;
+            mapModel = gltf.scene;
 
-            // --- CALIBRAGE TAILLE ---
-            const box = new THREE.Box3().setFromObject(maison);
+            // Mise à l'échelle pour que la maison devienne une grande carte
+            const box = new THREE.Box3().setFromObject(mapModel);
             const size = box.getSize(new THREE.Vector3());
-            const maxDim = Math.max(size.x, size.y, size.z);
-            const scale = 20 / maxDim; // On la fait assez grande
-            maison.scale.set(scale, scale, scale);
+            const scale = 50 / Math.max(size.x, size.z); // On force une largeur de 50 unités
+            mapModel.scale.set(scale, scale, scale);
             
-            // --- POSITIONNEMENT ---
+            // On centre la carte au sol
             const center = box.getCenter(new THREE.Vector3());
-            maison.position.x = -center.x * scale;
-            maison.position.y = -center.y * scale;
-            maison.position.z = -center.z * scale;
-            maison.position.y += size.y * scale / 2; // Pose la base sur le sol
+            mapModel.position.set(-center.x * scale, 0, -center.z * scale);
 
-            document.getElementById('status').innerText = "✅ Prêt !";
+            document.getElementById('status').innerText = "✅ Carte prête !";
             document.getElementById('btn-play').style.display = "block";
-        }, 
-        (xhr) => {
-            let p = Math.round((xhr.loaded / xhr.total) * 100);
-            document.getElementById('status').innerText = "Installation : " + p + "%";
         });
 
         document.getElementById('btn-play').addEventListener('click', () => {
+            document.body.requestPointerLock();
             document.getElementById('overlay').style.display = 'none';
             init();
         });
 
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x00BFFF); // Ciel bleu vif
+            scene.background = new THREE.Color(0x00BFFF); // Ciel Bleu
             
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            
-            // --- POSITION DE DÉPART (SUR LA MAISON) ---
-            // On se place un peu en hauteur et au centre
-            camera.position.set(0, 12, 15); 
-            camera.lookAt(0, 5, 0);
+            // On apparaît "sur" la maison (hauteur 5)
+            camera.position.set(0, 5, 0); 
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            // Lumières
-            scene.add(new THREE.AmbientLight(0xffffff, 1.2));
-            const sun = new THREE.DirectionalLight(0xffffff, 1);
-            sun.position.set(50, 100, 50);
+            scene.add(new THREE.AmbientLight(0xffffff, 1));
+            const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+            sun.position.set(10, 50, 10);
             scene.add(sun);
 
-            // Sol herbe
-            const floor = new THREE.Mesh(
-                new THREE.PlaneGeometry(500, 500),
-                new THREE.MeshLambertMaterial({ color: 0x2ed573 })
-            );
-            floor.rotation.x = -Math.PI / 2;
-            scene.add(floor);
-
-            if(maison) {
-                scene.add(maison);
-            }
+            if(mapModel) scene.add(mapModel);
 
             animate();
         }
 
-        function animate() {
-            requestAnimationFrame(animate);
-            // On a supprimé la ligne qui faisait tourner la maison
-            renderer.render(scene, camera);
-        }
-
-        // Redimensionnement fenêtre
-        window.addEventListener('resize', () => {
-            if(camera) {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
+        // --- CONTRÔLES ---
+        window.addEventListener('keydown', (e) => { keys[e.code] = true; });
+        window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+        document.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement) {
+                camera.rotation.y -= e.movementX * 0.002;
             }
         });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (document.pointerLockElement) {
+                const speed = 0.15;
+                if (keys['KeyW']) camera.translateZ(-speed);
+                if (keys['KeyS']) camera.translateZ(speed);
+                if (keys['KeyA']) camera.translateX(-speed);
+                if (keys['KeyD']) camera.translateX(speed);
+                // On garde la caméra à une hauteur fixe pour "marcher"
+                camera.position.y = 5; 
+            }
+
+            renderer.render(scene, camera);
+        }
     </script>
 </body>
 </html>
