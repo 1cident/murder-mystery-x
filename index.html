@@ -1,74 +1,251 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>MMX - Sol rabaissé</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Murder Mystery X - Abandoned House</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #00BFFF; font-family: sans-serif; }
-        #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #00BFFF; z-index: 1000; }
-        #status { color: white; font-weight: bold; font-size: 20px; text-shadow: 2px 2px black; }
-        #btn-play { padding: 15px 40px; font-size: 24px; cursor: pointer; display: none; margin-top: 20px; background: #ff4757; color: white; border: none; border-radius: 10px; }
+        /* --- STYLE CSS --- */
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        #overlay {
+            position: absolute; inset: 0; z-index: 1000;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: radial-gradient(circle, #1a1a1a 0%, #000 100%); color: white;
+        }
+
+        #loader-bar-container { width: 300px; height: 10px; background: #333; border-radius: 5px; margin: 20px; overflow: hidden; border: 1px solid #444; }
+        #loader-bar { width: 0%; height: 100%; background: #ff4757; transition: width 0.3s; }
+
+        #btn-play {
+            padding: 15px 50px; font-size: 24px; font-weight: bold; color: white;
+            background: #ff4757; border: none; border-radius: 5px; cursor: pointer;
+            display: none; box-shadow: 0 4px 15px rgba(255, 71, 87, 0.4); transition: 0.2s;
+        }
+        #btn-play:hover { background: #ff6b81; transform: scale(1.05); }
+
+        /* Interface en jeu */
+        #hud { position: absolute; inset: 0; pointer-events: none; display: none; }
+        #crosshair { 
+            position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; 
+            background: white; border-radius: 50%; transform: translate(-50%, -50%); 
+            border: 2px solid rgba(0,0,0,0.5); opacity: 0.8;
+        }
+        #stats { position: absolute; bottom: 20px; left: 20px; color: white; }
+        #role-badge { 
+            position: absolute; top: 20px; right: 20px; padding: 10px 20px; 
+            background: rgba(0,0,0,0.7); border-left: 5px solid #ff4757; 
+            font-weight: bold; font-size: 1.2em; text-transform: uppercase;
+        }
+        #instructions {
+            position: absolute; bottom: 20px; right: 20px; color: rgba(255,255,255,0.6);
+            font-size: 14px; text-align: right;
+        }
     </style>
 </head>
 <body>
 
     <div id="overlay">
-        <div id="status">Chargement...</div>
-        <button id="btn-play">JOUER</button>
+        <h1 style="letter-spacing: 5px;">MURDER MYSTERY X</h1>
+        <div id="loader-bar-container"><div id="loader-bar"></div></div>
+        <div id="status">Initialisation des ressources...</div>
+        <button id="btn-play">ENTRER DANS LA MAISON</button>
+    </div>
+
+    <div id="hud">
+        <div id="crosshair"></div>
+        <div id="role-badge">Innocent</div>
+        <div id="stats">
+            <div style="font-size: 12px; margin-bottom: 5px;">ÉNERGIE LAMPE</div>
+            <div id="battery" style="width: 150px; height: 8px; background: #333; border: 1px solid #555;">
+                <div id="battery-level" style="width: 100%; height: 100%; background: #eccc68;"></div>
+            </div>
+        </div>
+        <div id="instructions">
+            [Z,Q,S,D] Marcher | [ESPACE] Sauter<br>
+            [F] Lampe de poche | [SOURIS] Regarder
+        </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
     <script>
-        let scene, camera, renderer, mapModel;
+        /** --- CONFIGURATION GLOBALE --- **/
+        let scene, camera, renderer, mapModel, flashlight;
         const keys = {};
-        
+        let isGameRunning = false;
+
+        // Physique
         let velocityY = 0;
         const gravity = -0.012;
-        const jumpStrength = 0.25;
-        
-        // --- RÉGLAGES DU SOL ---
-        const groundLevel = -5; // On descend le sol à -5
-        const playerHeight = groundLevel + 2; // Le joueur sera 2 unités au-dessus du sol
+        const jumpStrength = 0.22;
+        const groundLevel = -8; // Sol rabaissé comme demandé
+        const playerHeight = 1.8; 
         let canJump = false;
 
+        // Lampe
+        let flashlightOn = false;
+        let battery = 100;
+
+        /** --- CHARGEMENT DU MODÈLE --- **/
         const loader = new THREE.GLTFLoader();
+        const statusEl = document.getElementById('status');
+        const barEl = document.getElementById('loader-bar');
+
         loader.load('./maison.glb', (gltf) => {
             mapModel = gltf.scene;
+
+            // Analyse et redimensionnement automatique de la carte
             const box = new THREE.Box3().setFromObject(mapModel);
             const size = box.getSize(new THREE.Vector3());
-            const scale = 60 / Math.max(size.x, size.z); 
+            const scale = 80 / Math.max(size.x, size.z); 
             mapModel.scale.set(scale, scale, scale);
             
-            // On pose la maison sur le nouveau niveau du sol
+            // Placement au sol
             const center = box.getCenter(new THREE.Vector3());
             mapModel.position.set(-center.x * scale, groundLevel, -center.z * scale);
 
-            document.getElementById('status').innerText = "✅ Carte prête !";
+            statusEl.innerText = "✅ Carte optimisée. Prêt à jouer.";
+            barEl.style.width = "100%";
             document.getElementById('btn-play').style.display = "block";
+        }, 
+        (xhr) => {
+            const p = Math.round((xhr.loaded / xhr.total) * 100);
+            statusEl.innerText = `Téléchargement de la carte : ${p}%`;
+            barEl.style.width = p + "%";
+        },
+        (err) => {
+            statusEl.innerText = "❌ Erreur : maison.glb introuvable dans le dossier.";
         });
 
+        /** --- INITIALISATION DU JEU --- **/
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x001525); // Nuit noire/bleutée
+            scene.fog = new THREE.FogExp2(0x001525, 0.02); // Brouillard pour l'ambiance
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, groundLevel + 10, 20); 
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Lumières d'ambiance
+            const ambient = new THREE.AmbientLight(0x404040, 0.3); // Très faible
+            scene.add(ambient);
+
+            const moonLight = new THREE.DirectionalLight(0x4444ff, 0.2);
+            moonLight.position.set(50, 100, 50);
+            scene.add(moonLight);
+
+            // Lampe de poche
+            flashlight = new THREE.SpotLight(0xffffff, 2);
+            flashlight.angle = Math.PI / 6;
+            flashlight.penumbra = 0.3;
+            flashlight.decay = 2;
+            flashlight.distance = 40;
+            flashlight.visible = false;
+            scene.add(flashlight);
+            scene.add(flashlight.target);
+
+            // Sol (Herbe de nuit)
+            const floorGeo = new THREE.PlaneGeometry(1000, 1000);
+            const floorMat = new THREE.MeshLambertMaterial({ color: 0x0a1f0a });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.y = groundLevel;
+            scene.add(floor);
+
+            if(mapModel) scene.add(mapModel);
+
+            isGameRunning = true;
+            document.getElementById('hud').style.display = 'block';
+            animate();
+        }
+
+        /** --- CONTRÔLES ET ÉVÉNEMENTS --- **/
         document.getElementById('btn-play').addEventListener('click', () => {
             document.body.requestPointerLock();
             document.getElementById('overlay').style.display = 'none';
             init();
         });
 
-        function init() {
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x00BFFF);
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        window.addEventListener('keydown', (e) => { 
+            keys[e.code] = true; 
+            if(e.code === 'KeyF' && isGameRunning) toggleFlashlight();
+            if(e.code === 'Space' && canJump) {
+                velocityY = jumpStrength;
+                canJump = false;
+            }
+        });
+        window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+        document.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement) {
+                camera.rotation.y -= e.movementX * 0.002;
+                // Limitation verticale pour ne pas faire de salto arrière
+                const pitch = camera.rotation.x - e.movementY * 0.002;
+                camera.rotation.x = Math.max(-Math.PI/2.5, Math.min(Math.PI/2.5, pitch));
+            }
+        });
+
+        function toggleFlashlight() {
+            flashlightOn = !flashlightOn;
+            flashlight.visible = flashlightOn;
+        }
+
+        /** --- BOUCLE DE RENDU (ANIMATE) --- **/
+        function animate() {
+            if(!isGameRunning) return;
+            requestAnimationFrame(animate);
             
-            // Position de départ (un peu au-dessus du nouveau sol)
-            camera.position.set(0, groundLevel + 5, 10); 
+            if (document.pointerLockElement) {
+                // Mouvements
+                const speed = keys['ShiftLeft'] ? 0.25 : 0.12;
+                const dirZ = (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0);
+                const dirX = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
+                
+                camera.translateZ(dirZ * speed);
+                camera.translateX(dirX * speed);
 
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
+                // Gravité
+                velocityY += gravity;
+                camera.position.y += velocityY;
 
-            scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+                // Collision sol
+                if (camera.position.y <= groundLevel + playerHeight) {
+                    camera.position.y = groundLevel + playerHeight;
+                    velocityY = 0;
+                    canJump = true;
+                }
 
-            // Création du sol vert placé plus bas
-            const floor = new THREE.Mesh(
-                new THREE.PlaneGeometry(1
+                // Mise à jour lampe de poche (suit la caméra)
+                flashlight.position.copy(camera.position);
+                const vector = new THREE.Vector3(0, 0, -1);
+                vector.applyQuaternion(camera.quaternion);
+                flashlight.target.position.copy(camera.position).add(vector);
+                
+                // Gestion Batterie
+                if(flashlightOn && battery > 0) {
+                    battery -= 0.05;
+                    if(battery <= 0) { flashlightOn = false; flashlight.visible = false; }
+                }
+                document.getElementById('battery-level').style.width = battery + "%";
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            if(camera) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
+    </script>
+</body>
+</html>
