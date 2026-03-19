@@ -2,48 +2,49 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>MMX - Exploration Map</title>
+    <title>MMX - Gravité Active</title>
     <style>
         body { margin: 0; overflow: hidden; background: #00BFFF; font-family: sans-serif; }
         #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #00BFFF; z-index: 1000; }
         #status { color: white; font-weight: bold; font-size: 20px; text-shadow: 2px 2px black; }
-        #btn-play { padding: 15px 40px; font-size: 24px; cursor: pointer; display: none; margin-top: 20px; background: #ff4757; color: white; border: none; border-radius: 10px; box-shadow: 0 5px 0 #b30000; }
-        #instructions { position: absolute; bottom: 20px; left: 20px; color: white; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; pointer-events: none; }
+        #btn-play { padding: 15px 40px; font-size: 24px; cursor: pointer; display: none; margin-top: 20px; background: #ff4757; color: white; border: none; border-radius: 10px; }
+        #hud { position: absolute; bottom: 20px; left: 20px; color: white; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; pointer-events: none; }
     </style>
 </head>
 <body>
 
     <div id="overlay">
-        <div id="status">Chargement de la carte (22 Mo)...</div>
-        <button id="btn-play">APPARAÎTRE SUR LA CARTE</button>
+        <div id="status">Chargement de la physique...</div>
+        <button id="btn-play">JOUER</button>
     </div>
 
-    <div id="instructions">Touches : ZQSD pour marcher | Souris pour regarder</div>
+    <div id="hud">ZQSD : Marcher | ESPACE : Sauter | SOURIS : Regarder</div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
     <script>
         let scene, camera, renderer, mapModel;
-        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
         const keys = {};
+        
+        // --- VARIABLES PHYSIQUE ---
+        let velocityY = 0;
+        const gravity = -0.012;
+        const jumpStrength = 0.25;
+        const playerHeight = 5; // Ta taille sur la maison
+        let canJump = false;
 
-        // 1. CHARGEMENT DE LA MAP
         const loader = new THREE.GLTFLoader();
         loader.load('./maison.glb', (gltf) => {
             mapModel = gltf.scene;
-
-            // Mise à l'échelle pour que la maison devienne une grande carte
             const box = new THREE.Box3().setFromObject(mapModel);
             const size = box.getSize(new THREE.Vector3());
-            const scale = 50 / Math.max(size.x, size.z); // On force une largeur de 50 unités
+            const scale = 60 / Math.max(size.x, size.z); 
             mapModel.scale.set(scale, scale, scale);
-            
-            // On centre la carte au sol
             const center = box.getCenter(new THREE.Vector3());
             mapModel.position.set(-center.x * scale, 0, -center.z * scale);
 
-            document.getElementById('status').innerText = "✅ Carte prête !";
+            document.getElementById('status').innerText = "✅ Physique prête !";
             document.getElementById('btn-play').style.display = "block";
         });
 
@@ -55,28 +56,28 @@
 
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x00BFFF); // Ciel Bleu
-            
+            scene.background = new THREE.Color(0x00BFFF);
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            // On apparaît "sur" la maison (hauteur 5)
-            camera.position.set(0, 5, 0); 
+            camera.position.set(0, playerHeight, 5); 
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
             scene.add(new THREE.AmbientLight(0xffffff, 1));
-            const sun = new THREE.DirectionalLight(0xffffff, 0.8);
-            sun.position.set(10, 50, 10);
-            scene.add(sun);
-
             if(mapModel) scene.add(mapModel);
 
             animate();
         }
 
-        // --- CONTRÔLES ---
-        window.addEventListener('keydown', (e) => { keys[e.code] = true; });
+        window.addEventListener('keydown', (e) => { 
+            keys[e.code] = true; 
+            // Sauter
+            if(e.code === 'Space' && canJump) {
+                velocityY = jumpStrength;
+                canJump = false;
+            }
+        });
         window.addEventListener('keyup', (e) => { keys[e.code] = false; });
         document.addEventListener('mousemove', (e) => {
             if (document.pointerLockElement) {
@@ -88,13 +89,23 @@
             requestAnimationFrame(animate);
             
             if (document.pointerLockElement) {
+                // Déplacement horizontal
                 const speed = 0.15;
                 if (keys['KeyW']) camera.translateZ(-speed);
                 if (keys['KeyS']) camera.translateZ(speed);
                 if (keys['KeyA']) camera.translateX(-speed);
                 if (keys['KeyD']) camera.translateX(speed);
-                // On garde la caméra à une hauteur fixe pour "marcher"
-                camera.position.y = 5; 
+
+                // --- LOGIQUE DE GRAVITÉ ---
+                velocityY += gravity; // On tire le joueur vers le bas
+                camera.position.y += velocityY;
+
+                // Detection du sol (simplifiée à Y = playerHeight)
+                if (camera.position.y <= playerHeight) {
+                    camera.position.y = playerHeight;
+                    velocityY = 0;
+                    canJump = true;
+                }
             }
 
             renderer.render(scene, camera);
