@@ -53,27 +53,7 @@ loader.load('./maison.glb', (gltf) => {
 }, (xhr) => {
     // Barre de progression
     console.log((xhr.loaded / xhr.total * 100) + '% chargé');
-});
 
-            // Optimisation et redressement
-            mapModel.rotation.set(0, 0, 0);
-            const box = new THREE.Box3().setFromObject(mapModel);
-            const size = box.getSize(new THREE.Vector3());
-            const scale = 110 / Math.max(size.x, size.z);
-            mapModel.scale.set(scale, scale, scale);
-            
-            const center = box.getCenter(new THREE.Vector3());
-            // On pose la maison sur le sol rabaissé
-            mapModel.position.set(-center.x * scale, groundLevel, -center.z * scale);
-
-            document.getElementById('status').innerText = "✅ Maison prête";
-            document.getElementById('btn-play').style.display = "block";
-        });
-
-        document.getElementById('btn-play').addEventListener('click', () => {
-            document.body.requestPointerLock();
-            document.getElementById('overlay').style.display = 'none';
-            init();
         });
 
        function init() {
