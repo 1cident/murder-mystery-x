@@ -1,133 +1,98 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <title>Murder Mystery X - Accès Maison</title>
-    <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
-#overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #1a1a1a; z-index: 1000; color: white; }
-#btn-play { padding: 15px 40px; font-size: 20px; cursor: pointer; display: none; background: #ff4757; color: white; border: none; border-radius: 5px; }
-#crosshair { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 10; }
-#hud { position: absolute; bottom: 20px; left: 20px; color: white; pointer-events: none; text-shadow: 1px 1px 2px black; }
-    </style>
-</head>
-<body>
+<script>
+    let scene, camera, renderer, mapModel, flashlight;
+    const keys = {};
+    let velocityY = 0;
+    let canJump = false;
 
-    <div id="overlay">
-        <h1>MURDER MYSTERY X</h1>
-        <p id="status">Chargement de la maison...</p>
-        <div style="width: 200px; height: 6px; background: #333; position: relative; margin-bottom: 20px;">
-            <div id="loader-bar"></div>
-        </div>
-        <button id="btn-play">JOUER</button>
-    </div>
-    <div id="crosshair"></div>
+    const groundLevel = -12;
+    const playerHeight = 2.2;
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    const loader = new THREE.GLTFLoader();
+    loader.load('./maison.glb', (gltf) => {
+        mapModel = gltf.scene;
+        mapModel.rotation.set(0, 0, 0);
+        const box = new THREE.Box3().setFromObject(mapModel);
+        const size = box.getSize(new THREE.Vector3());
+        const scale = 110 / Math.max(size.x, size.z);
+        mapModel.scale.set(scale, scale, scale);
+        const center = box.getCenter(new THREE.Vector3());
+        mapModel.position.set(-center.x * scale, -12, -center.z * scale);
 
-    <script>
-        let scene, camera, renderer, mapModel, flashlight;
-        const keys = {};
-        let velocityY = 0;
-        let canJump = false;
+        document.getElementById('status').innerText = "✅ Maison prête";
+        document.getElementById('btn-play').style.display = "block";
+    });
 
-        // --- RÉGLAGES HAUTEUR ---
-        const groundLevel = -12; // On descend encore le sol pour libérer l'entrée
-        const playerHeight = 2.0; // Hauteur des yeux du joueur
+    // --- LE BOUTON JOUER (CORRIGÉ) ---
+    document.getElementById('btn-play').addEventListener('click', () => {
+        document.body.requestPointerLock();
+        document.getElementById('overlay').style.display = 'none';
+        init(); 
+    });
 
-      const loader = new THREE.GLTFLoader();
-loader.load('./maison.glb', (gltf) => {
-    mapModel = gltf.scene;
-    
-    // On redresse et on scale
-    mapModel.rotation.set(0, 0, 0);
-    const box = new THREE.Box3().setFromObject(mapModel);
-    const size = box.getSize(new THREE.Vector3());
-    const scale = 110 / Math.max(size.x, size.z);
-    mapModel.scale.set(scale, scale, scale);
-    
-    // POSITION : On la pose à groundLevel (-12)
-    const center = box.getCenter(new THREE.Vector3());
-    mapModel.position.set(-center.x * scale, -12, -center.z * scale);
-
-    document.getElementById('status').innerText = "✅ Maison prête";
-    document.getElementById('btn-play').style.display = "block";
-}, (xhr) => {
-    // Barre de progression
-    console.log((xhr.loaded / xhr.total * 100) + '% chargé');
-
-        });
-
-       function init() {
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x020202); // Noir pour la lampe
-    
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.rotation.order = 'YXZ'; 
-    // SPAWN : On te met devant la porte (Z = 30)
-    camera.position.set(0, -12 + 2.2, 30); 
-
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.outputEncoding = THREE.sRGBEncoding;
-    document.body.appendChild(renderer.domElement);
-
-    // LA LAMPE TORCHE
-    flashlight = new THREE.SpotLight(0xffffff, 4, 50, Math.PI/6, 0.5);
-    scene.add(flashlight);
-    scene.add(flashlight.target); // Important pour diriger le faisceau
-
-    scene.add(new THREE.AmbientLight(0xffffff, 0.2)); // Un peu de lumière résiduelle
-    if(mapModel) scene.add(mapModel);
-    animate();
-}
-            
-        window.addEventListener('keydown', (e) => {
-            keys[e.code] = true;
-            if(e.code === 'KeyF') flashlight.visible = !flashlight.visible;
-            if(e.code === 'Space' && canJump) { velocityY = 0.2; canJump = false; }
-        });
-        window.addEventListener('keyup', (e) => keys[e.code] = false);
-
-        document.addEventListener('mousemove', (e) => {
-            if (document.pointerLockElement) {
-                camera.rotation.y -= e.movementX * 0.002;
-                camera.rotation.x -= e.movementY * 0.002;
-                camera.rotation.x = Math.max(-1.5, Math.min(1.5, camera.rotation.x));
-                camera.rotation.z = 0;
-            }
-        });
-
-       function animate() {
-    requestAnimationFrame(animate);
-    if (document.pointerLockElement) {
-        const speed = keys['ShiftLeft'] ? 0.35 : 0.18; // SPRINT INCLUS
+    function init() {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x020202);
         
-        if (keys['KeyW']) camera.translateZ(-speed);
-        if (keys['KeyS']) camera.translateZ(speed);
-        if (keys['KeyA']) camera.translateX(-speed);
-        if (keys['KeyD']) camera.translateX(speed);
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.rotation.order = 'YXZ'; 
+        camera.position.set(0, groundLevel + playerHeight, 30); 
 
-        // GRAVITÉ : Tu restes à 2.2 unités au dessus de -12
-        if (camera.position.y > -9.8) {
-            velocityY -= 0.01;
-        } else {
-            velocityY = 0;
-            camera.position.y = -9.8;
-        }
-        camera.position.y += velocityY;
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        document.body.appendChild(renderer.domElement);
 
-        // LA LAMPE SUIT LA CAMÉRA
-        if (flashlight) {
-            flashlight.position.copy(camera.position);
-            const vector = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-            flashlight.target.position.copy(camera.position).add(vector);
-        }
+        flashlight = new THREE.SpotLight(0xffffff, 4, 50, Math.PI/6, 0.5);
+        scene.add(flashlight);
+        scene.add(flashlight.target);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+        if(mapModel) scene.add(mapModel);
+        animate();
     }
-    renderer.render(scene, camera);
-}
-    
-    </script>
-</body>
-</html>
+            
+    window.addEventListener('keydown', (e) => {
+        keys[e.code] = true;
+        if(e.code === 'KeyF' && flashlight) flashlight.visible = !flashlight.visible;
+        if(e.code === 'Space' && canJump) { velocityY = 0.2; canJump = false; }
+    });
+    window.addEventListener('keyup', (e) => keys[e.code] = false);
+
+    document.addEventListener('mousemove', (e) => {
+        if (document.pointerLockElement) {
+            camera.rotation.y -= e.movementX * 0.002;
+            camera.rotation.x -= e.movementY * 0.002;
+            camera.rotation.x = Math.max(-1.5, Math.min(1.5, camera.rotation.x));
+            camera.rotation.z = 0;
+        }
+    });
+
+    function animate() {
+        requestAnimationFrame(animate);
+        if (document.pointerLockElement) {
+            const speed = keys['ShiftLeft'] ? 0.35 : 0.18;
+            
+            if (keys['KeyW']) camera.translateZ(-speed);
+            if (keys['KeyS']) camera.translateZ(speed);
+            if (keys['KeyA']) camera.translateX(-speed);
+            if (keys['KeyD']) camera.translateX(speed);
+
+            if (camera.position.y > -9.8) {
+                velocityY -= 0.01;
+                canJump = false;
+            } else {
+                velocityY = 0;
+                camera.position.y = -9.8;
+                canJump = true; // --- RÉACTIVE LE SAUT ---
+            }
+            camera.position.y += velocityY;
+
+            if (flashlight) {
+                flashlight.position.copy(camera.position);
+                const vector = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+                flashlight.target.position.copy(camera.position).add(vector);
+            }
+        }
+        renderer.render(scene, camera);
+    }
+</script>
