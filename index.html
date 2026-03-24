@@ -2,33 +2,29 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Murder Mystery X - Version Intégrale</title>
+    <title>MMX - Lampe Torche Intégrée</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
-        #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #1a1a1a; z-index: 1000; color: white; text-align: center; }
+        #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #0a0a0a; z-index: 1000; color: white; }
         #loader-bar { width: 0%; height: 6px; background: #ff4757; position: absolute; bottom: 0; left: 0; transition: width 0.3s; }
-        #btn-play { padding: 15px 40px; font-size: 20px; cursor: pointer; display: none; background: #ff4757; color: white; border: none; border-radius: 5px; font-weight: bold; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; background: white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 10; border: 1px solid black; }
-        #hud { position: absolute; bottom: 20px; left: 20px; color: white; text-shadow: 2px 2px 4px #000; pointer-events: none; font-size: 14px; }
-        #role { position: absolute; top: 20px; right: 20px; color: #ff4757; font-weight: bold; font-size: 24px; text-transform: uppercase; }
+        #btn-play { padding: 15px 40px; font-size: 20px; cursor: pointer; display: none; background: #ff4757; color: white; border: none; border-radius: 5px; font-weight: bold; box-shadow: 0 0 20px rgba(255, 71, 87, 0.4); }
+        #hud { position: absolute; bottom: 20px; left: 20px; color: white; text-shadow: 2px 2px 4px #000; pointer-events: none; font-size: 14px; line-height: 1.6; }
     </style>
 </head>
 <body>
 
     <div id="overlay">
         <h1>MURDER MYSTERY X</h1>
-        <p id="status">Chargement de la maison (22 Mo)...</p>
+        <p id="status">Chargement de la maison...</p>
         <div style="width: 200px; height: 6px; background: #333; position: relative; margin-bottom: 20px;">
             <div id="loader-bar"></div>
         </div>
-        <button id="btn-play">DEMARRER LA PARTIE</button>
+        <button id="btn-play">JOUER</button>
     </div>
 
-    <div id="crosshair"></div>
-    <div id="role">Le Tueur</div>
     <div id="hud">
-        <b>[Z,Q,S,D]</b> Déplacement | <b>[MAJ]</b> Sprinter<br>
-        <b>[F]</b> Lampe de poche | <b>[E]</b> Sortir le Couteau<br>
+        <b>[Z,Q,S,D]</b> Bouger | <b>[MAJ]</b> Courir<br>
+        <b>[F]</b> Allumer la Lampe | <b>[E]</b> Sortir le Couteau<br>
         <b>[ESPACE]</b> Sauter
     </div>
 
@@ -36,31 +32,23 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
     <script>
-        let scene, camera, renderer, mapModel, flashlight, knife;
+        let scene, camera, renderer, mapModel, flashlight, flashlightModel, knife;
+        let isFlashlightOn = true;
         let isKnifeActive = false;
         const keys = {};
         let velocityY = 0;
         let canJump = false;
 
-        // Paramètres physiques
         const groundLevel = -12;
         const playerHeight = 2.2;
         const raycaster = new THREE.Raycaster();
 
-        // 1. CHARGEMENT DU MODELE
+        // 1. CHARGEMENT
         const loader = new THREE.GLTFLoader();
         loader.load('./maison.glb', (gltf) => {
             mapModel = gltf.scene;
+            mapModel.traverse(node => { if (node.isMesh) { node.material.side = THREE.DoubleSide; node.castShadow = true; node.receiveShadow = true; } });
             
-            // Correction de la qualité et des textures
-            mapModel.traverse(node => {
-                if (node.isMesh) {
-                    node.material.side = THREE.DoubleSide;
-                    node.castShadow = true;
-                    node.receiveShadow = true;
-                }
-            });
-
             const box = new THREE.Box3().setFromObject(mapModel);
             const size = box.getSize(new THREE.Vector3());
             const scale = 115 / Math.max(size.x, size.z);
@@ -68,7 +56,7 @@
             const center = box.getCenter(new THREE.Vector3());
             mapModel.position.set(-center.x * scale, groundLevel, -center.z * scale);
 
-            document.getElementById('status').innerText = "✅ Maison chargée et redressée";
+            document.getElementById('status').innerText = "✅ Maison prête";
             document.getElementById('btn-play').style.display = "block";
         }, (xhr) => {
             const p = (xhr.loaded / xhr.total) * 100;
@@ -77,47 +65,49 @@
 
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x020202); // Nuit profonde
-            scene.fog = new THREE.FogExp2(0x020202, 0.012);
+            scene.background = new THREE.Color(0x010101);
+            scene.fog = new THREE.FogExp2(0x010101, 0.015);
 
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.rotation.order = 'YXZ'; // Caméra stable FPS
-            camera.position.set(0, groundLevel + playerHeight, 35); // Devant la maison
+            camera.rotation.order = 'YXZ';
+            camera.position.set(0, groundLevel + playerHeight, 30);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.outputEncoding = THREE.sRGBEncoding; // Haute qualité couleurs
+            renderer.outputEncoding = THREE.sRGBEncoding;
             document.body.appendChild(renderer.domElement);
 
-            // Lumières
-            scene.add(new THREE.AmbientLight(0xffffff, 0.25));
-            flashlight = new THREE.SpotLight(0xffffff, 3, 45, Math.PI/6, 0.5);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.15));
+
+            // --- LA LAMPE TORCHE (LUMIÈRE) ---
+            flashlight = new THREE.SpotLight(0xffffff, 4, 60, Math.PI/7, 0.4, 1);
+            flashlight.castShadow = true;
             scene.add(flashlight);
             scene.add(flashlight.target);
 
-            // Création du COUTEAU (Modèle simple 3D)
-            const knifeGroup = new THREE.Group();
-            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.02), new THREE.MeshStandardMaterial({color: 0xcccccc, metalness: 1}));
-            const handle = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.3, 0.05), new THREE.MeshStandardMaterial({color: 0x333333}));
-            blade.position.y = 0.45;
-            knifeGroup.add(blade); knifeGroup.add(handle);
-            knife = knifeGroup;
+            // --- LA LAMPE TORCHE (OBJET 3D DANS LA MAIN) ---
+            flashlightModel = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.05, 0.05, 0.4, 16),
+                new THREE.MeshStandardMaterial({ color: 0x222222 })
+            );
+            flashlightModel.rotation.x = Math.PI / 2;
+            scene.add(flashlightModel);
+
+            // --- LE COUTEAU ---
+            knife = new THREE.Group();
+            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.5, 0.08), new THREE.MeshStandardMaterial({color: 0xaaaaaa, metalness: 0.9}));
+            const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.2, 0.06), new THREE.MeshStandardMaterial({color: 0x442200}));
+            blade.position.y = 0.35;
+            knife.add(blade); knife.add(handle);
             knife.visible = false;
             scene.add(knife);
 
             animate();
         }
 
-        // EVENEMENTS
-        document.getElementById('btn-play').addEventListener('click', () => {
-            document.body.requestPointerLock();
-            document.getElementById('overlay').style.display = 'none';
-            init();
-        });
-
         window.addEventListener('keydown', (e) => {
             keys[e.code] = true;
-            if(e.code === 'KeyF') flashlight.visible = !flashlight.visible;
+            if(e.code === 'KeyF') { isFlashlightOn = !isFlashlightOn; flashlight.visible = isFlashlightOn; }
             if(e.code === 'KeyE') { isKnifeActive = !isKnifeActive; knife.visible = isKnifeActive; }
             if(e.code === 'Space' && canJump) { velocityY = 0.22; canJump = false; }
         });
@@ -128,14 +118,13 @@
                 camera.rotation.y -= e.movementX * 0.002;
                 camera.rotation.x -= e.movementY * 0.002;
                 camera.rotation.x = Math.max(-1.5, Math.min(1.5, camera.rotation.x));
-                camera.rotation.z = 0; // Anti-roulis
             }
         });
 
         function animate() {
             requestAnimationFrame(animate);
             if (document.pointerLockElement) {
-                const speed = keys['ShiftLeft'] ? 0.38 : 0.18; // Sprint inclus
+                const speed = keys['ShiftLeft'] ? 0.35 : 0.16;
                 let oldPos = camera.position.clone();
 
                 if (keys['KeyW']) camera.translateZ(-speed);
@@ -143,13 +132,7 @@
                 if (keys['KeyA']) camera.translateX(-speed);
                 if (keys['KeyD']) camera.translateX(speed);
 
-                // --- COLLISIONS ---
-                const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
-                raycaster.set(camera.position, dir);
-                const hit = raycaster.intersectObject(mapModel, true);
-                if (hit.length > 0 && hit[0].distance < 1.8) camera.position.copy(oldPos);
-
-                // Gravité
+                // Gravité & Sol
                 velocityY -= 0.01;
                 camera.position.y += velocityY;
                 if (camera.position.y <= groundLevel + playerHeight) {
@@ -158,27 +141,34 @@
                     canJump = true;
                 }
 
-                // --- MISE A JOUR LAMPE ET COUTEAU ---
+                // MISE À JOUR DE LA LAMPE (Main gauche)
                 flashlight.position.copy(camera.position);
-                const targetDir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
-                flashlight.target.position.copy(camera.position).add(targetDir);
+                const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+                flashlight.target.position.copy(camera.position).add(dir);
 
+                flashlightModel.position.copy(camera.position);
+                flashlightModel.quaternion.copy(camera.quaternion);
+                flashlightModel.translateX(-0.6); // À gauche
+                flashlightModel.translateY(-0.4); // Un peu en bas
+                flashlightModel.translateZ(-0.8); // Devant
+
+                // MISE À JOUR DU COUTEAU (Main droite)
                 if(isKnifeActive) {
                     knife.position.copy(camera.position);
-                    knife.applyQuaternion(camera.quaternion);
-                    knife.translateZ(-1.2); knife.translateX(0.6); knife.translateY(-0.4);
-                    knife.rotation.x += 1.5; // Positionnement main
+                    knife.quaternion.copy(camera.quaternion);
+                    knife.translateX(0.6); // À droite
+                    knife.translateY(-0.5);
+                    knife.translateZ(-1.0);
+                    knife.rotation.x += 1.2;
                 }
             }
             renderer.render(scene, camera);
         }
 
-        window.addEventListener('resize', () => {
-            if(camera) {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
-            }
+        document.getElementById('btn-play').addEventListener('click', () => {
+            document.body.requestPointerLock();
+            document.getElementById('overlay').style.display = 'none';
+            init();
         });
     </script>
 </body>
