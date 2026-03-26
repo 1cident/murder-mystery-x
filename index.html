@@ -2,32 +2,27 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Murder Mystery X - Intégral</title>
+    <title>MMX - Physique Solide</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
-        #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle, #1a1a1a, #000); z-index: 1000; color: white; }
-        #loader-bar-container { width: 200px; height: 5px; background: #333; border-radius: 3px; margin: 20px; overflow: hidden; }
-        #loader-bar { width: 0%; height: 100%; background: #ff4757; transition: width 0.3s; }
-        #btn-play { padding: 15px 40px; font-size: 18px; cursor: pointer; display: none; background: #ff4757; color: white; border: none; border-radius: 4px; font-weight: bold; letter-spacing: 1px; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
+        #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #111; z-index: 1000; color: white; }
+        #loader-bar { width: 0%; height: 5px; background: #ff4757; position: absolute; bottom: 0; left: 0; transition: width 0.3s; }
+        #btn-play { padding: 15px 40px; font-size: 18px; cursor: pointer; display: none; background: #ff4757; color: white; border: none; border-radius: 4px; font-weight: bold; }
         #crosshair { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; background: white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 10; border: 1px solid black; }
-        #hud { position: absolute; bottom: 20px; left: 20px; color: white; text-shadow: 2px 2px 4px #000; pointer-events: none; font-size: 13px; line-height: 1.6; opacity: 0.8; }
+        #hud { position: absolute; bottom: 20px; left: 20px; color: white; text-shadow: 2px 2px 4px #000; pointer-events: none; font-size: 12px; opacity: 0.7; }
     </style>
 </head>
 <body>
 
     <div id="overlay">
-        <h1 style="margin:0; letter-spacing:4px;">MURDER MYSTERY X</h1>
-        <div id="loader-bar-container"><div id="loader-bar"></div></div>
-        <p id="status">Chargement de la maison (22 Mo)...</p>
-        <button id="btn-play">DÉMARRER</button>
+        <h1>MURDER MYSTERY X</h1>
+        <div style="width: 200px; height: 4px; background: #333; margin: 20px;"><div id="loader-bar"></div></div>
+        <p id="status">Chargement de la structure...</p>
+        <button id="btn-play">JOUER</button>
     </div>
 
     <div id="crosshair"></div>
-    <div id="hud">
-        <b>Z,Q,S,D</b> : Marcher | <b>MAJ</b> : Courir<br>
-        <b>F</b> : Lampe Torche | <b>E</b> : Sortir Couteau<br>
-        <b>ESPACE</b> : Sauter
-    </div>
+    <div id="hud"><b>Z,Q,S,D</b> : Bouger | <b>MAJ</b> : Courir | <b>F</b> : Lampe | <b>E</b> : Couteau</div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
@@ -35,14 +30,20 @@
     <script>
         let scene, camera, renderer, mapModel, flashlight, knife;
         let isKnifeActive = false, isFlashlightOn = true;
-        const keys = {}, groundLevel = -12, playerHeight = 2.2;
+        const keys = {}, groundLevel = -12;
+        
+        // --- REGLAGES PERSONNAGE PLUS PETIT ---
+        const playerHeight = 1.6; // Taille réduite (yeux à 1.6m)
+        const playerRadius = 0.8; // Rayon de collision autour du joueur
+        
         let velocityY = 0, canJump = false;
+        const raycaster = new THREE.Raycaster();
 
-        // --- 1. CHARGEMENT DU MODÈLE ---
+        // 1. CHARGEMENT
         const loader = new THREE.GLTFLoader();
         loader.load('./maison.glb', (gltf) => {
             mapModel = gltf.scene;
-            mapModel.traverse(n => { if(n.isMesh) { n.material.side = 2; n.castShadow = n.receiveShadow = true; }});
+            mapModel.traverse(n => { if(n.isMesh) { n.material.side = 2; n.castShadow = true; n.receiveShadow = true; }});
             
             const box = new THREE.Box3().setFromObject(mapModel);
             const size = box.getSize(new THREE.Vector3());
@@ -51,13 +52,12 @@
             const center = box.getCenter(new THREE.Vector3());
             mapModel.position.set(-center.x * scale, groundLevel, -center.z * scale);
 
-            document.getElementById('status').innerText = "✅ Maison prête !";
+            document.getElementById('status').innerText = "✅ Maison Solide Prête";
             document.getElementById('btn-play').style.display = "block";
         }, (xhr) => {
             document.getElementById('loader-bar').style.width = (xhr.loaded / xhr.total * 100) + "%";
         });
 
-        // --- 2. INITIALISATION ---
         function init() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x020202);
@@ -69,38 +69,57 @@
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
             renderer.outputEncoding = THREE.sRGBEncoding;
             document.body.appendChild(renderer.domElement);
 
-            // LUMIÈRES
             scene.add(new THREE.AmbientLight(0xffffff, 0.2));
             flashlight = new THREE.SpotLight(0xffffff, 4, 50, Math.PI/6, 0.5);
             scene.add(flashlight); scene.add(flashlight.target);
 
-            // COUTEAU (Modèle Simple)
+            // COUTEAU
             knife = new THREE.Group();
-            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.5, 0.1), new THREE.MeshStandardMaterial({color: 0x888888, metalness: 1}));
-            const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.2, 0.05), new THREE.MeshStandardMaterial({color: 0x331100}));
-            blade.position.y = 0.35; knife.add(blade); knife.add(handle);
+            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.4, 0.08), new THREE.MeshStandardMaterial({color: 0x888888, metalness: 1}));
+            const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.15, 0.04), new THREE.MeshStandardMaterial({color: 0x331100}));
+            blade.position.y = 0.25; knife.add(blade); knife.add(handle);
             knife.visible = false; scene.add(knife);
 
             if(mapModel) scene.add(mapModel);
             animate();
         }
 
-        // --- 3. CONTRÔLES ---
-        document.getElementById('btn-play').addEventListener('click', () => {
-            document.body.requestPointerLock();
-            document.getElementById('overlay').style.display = 'none';
-            init();
-        });
+        // FONCTION DE COLLISION AVANCÉE
+        function checkCollision(targetPos, currentPos) {
+            if (!mapModel) return targetPos;
+
+            // On teste 4 directions horizontales + 1 verticale (toit)
+            const dirs = [
+                new THREE.Vector3(0, 0, -1), // Devant
+                new THREE.Vector3(0, 0, 1),  // Derrière
+                new THREE.Vector3(1, 0, 0),  // Droite
+                new THREE.Vector3(-1, 0, 0), // Gauche
+                new THREE.Vector3(0, 1, 0)   // Haut (Toit)
+            ];
+
+            for (let d of dirs) {
+                // On transforme la direction selon la rotation du joueur pour le horizontal
+                let worldDir = d.clone().applyQuaternion(camera.quaternion);
+                if (d.y !== 0) worldDir = d; // Garder le vecteur haut vertical pur
+
+                raycaster.set(currentPos, worldDir);
+                const hits = raycaster.intersectObject(mapModel, true);
+
+                if (hits.length > 0 && hits[0].distance < playerRadius) {
+                    return currentPos; // Si on touche, on bloque le mouvement
+                }
+            }
+            return targetPos;
+        }
 
         window.addEventListener('keydown', (e) => {
             keys[e.code] = true;
             if(e.code === 'KeyF') { isFlashlightOn = !isFlashlightOn; flashlight.visible = isFlashlightOn; }
             if(e.code === 'KeyE') { isKnifeActive = !isKnifeActive; knife.visible = isKnifeActive; }
-            if(e.code === 'Space' && canJump) { velocityY = 0.22; canJump = false; }
+            if(e.code === 'Space' && canJump) { velocityY = 0.2; canJump = false; }
         });
         window.addEventListener('keyup', (e) => keys[e.code] = false);
 
@@ -113,26 +132,40 @@
             }
         });
 
-        // --- 4. BOUCLE DE JEU ---
         function animate() {
             requestAnimationFrame(animate);
             if (document.pointerLockElement) {
-                const speed = keys['ShiftLeft'] ? 0.38 : 0.18;
+                const speed = keys['ShiftLeft'] ? 0.3 : 0.15;
+                let oldPos = camera.position.clone();
                 
+                // Mouvement temporaire
                 if (keys['KeyW']) camera.translateZ(-speed);
                 if (keys['KeyS']) camera.translateZ(speed);
                 if (keys['KeyA']) camera.translateX(-speed);
                 if (keys['KeyD']) camera.translateX(speed);
 
-                // PHYSIQUE
+                // Application de la collision
+                let newPos = camera.position.clone();
+                camera.position.copy(oldPos); // Reset
+                camera.position.copy(checkCollision(newPos, oldPos)); // Valide ou bloque
+
+                // Gravité et Toit
                 velocityY -= 0.01;
                 camera.position.y += velocityY;
+
+                // Test collision plafond (toit)
+                raycaster.set(camera.position, new THREE.Vector3(0, 1, 0));
+                const roofHit = raycaster.intersectObject(mapModel, true);
+                if (roofHit.length > 0 && roofHit[0].distance < 0.5) {
+                    velocityY = -0.01; // On rebondit vers le bas
+                }
+
                 if (camera.position.y <= groundLevel + playerHeight) {
                     camera.position.y = groundLevel + playerHeight;
                     velocityY = 0; canJump = true;
                 }
 
-                // MISE À JOUR LAMPE & COUTEAU
+                // Update Objets
                 flashlight.position.copy(camera.position);
                 const targetPos = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).add(camera.position);
                 flashlight.target.position.copy(targetPos);
@@ -140,12 +173,18 @@
                 if(isKnifeActive) {
                     knife.position.copy(camera.position);
                     knife.quaternion.copy(camera.quaternion);
-                    knife.translateX(0.6); knife.translateY(-0.5); knife.translateZ(-1.0);
+                    knife.translateX(0.5); knife.translateY(-0.4); knife.translateZ(-0.8);
                     knife.rotation.x += 1.2;
                 }
             }
             renderer.render(scene, camera);
         }
+
+        document.getElementById('btn-play').addEventListener('click', () => {
+            document.body.requestPointerLock();
+            document.getElementById('overlay').style.display = 'none';
+            init();
+        });
 
         window.addEventListener('resize', () => {
             if(!camera) return;
