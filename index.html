@@ -1,98 +1,55 @@
-<script>
-    let scene, camera, renderer, mapModel, flashlight;
-    const keys = {};
-    let velocityY = 0;
-    let canJump = false;
-
-    const groundLevel = -12;
-    const playerHeight = 2.2;
-
-    const loader = new THREE.GLTFLoader();
-    loader.load('./maison.glb', (gltf) => {
-        mapModel = gltf.scene;
-        mapModel.rotation.set(0, 0, 0);
-        const box = new THREE.Box3().setFromObject(mapModel);
-        const size = box.getSize(new THREE.Vector3());
-        const scale = 110 / Math.max(size.x, size.z);
-        mapModel.scale.set(scale, scale, scale);
-        const center = box.getCenter(new THREE.Vector3());
-        mapModel.position.set(-center.x * scale, -12, -center.z * scale);
-
-        document.getElementById('status').innerText = "✅ Maison prête";
-        document.getElementById('btn-play').style.display = "block";
-    });
-
-    // --- LE BOUTON JOUER (CORRIGÉ) ---
-    document.getElementById('btn-play').addEventListener('click', () => {
-        document.body.requestPointerLock();
-        document.getElementById('overlay').style.display = 'none';
-        init(); 
-    });
-
-    function init() {
-        scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x020202);
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Murder Mystery X - Officiel</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         
-        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.rotation.order = 'YXZ'; 
-        camera.position.set(0, groundLevel + playerHeight, 30); 
-
-        renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.outputEncoding = THREE.sRGBEncoding;
-        document.body.appendChild(renderer.domElement);
-
-        flashlight = new THREE.SpotLight(0xffffff, 4, 50, Math.PI/6, 0.5);
-        scene.add(flashlight);
-        scene.add(flashlight.target);
-
-        scene.add(new THREE.AmbientLight(0xffffff, 0.2));
-        if(mapModel) scene.add(mapModel);
-        animate();
-    }
-            
-    window.addEventListener('keydown', (e) => {
-        keys[e.code] = true;
-        if(e.code === 'KeyF' && flashlight) flashlight.visible = !flashlight.visible;
-        if(e.code === 'Space' && canJump) { velocityY = 0.2; canJump = false; }
-    });
-    window.addEventListener('keyup', (e) => keys[e.code] = false);
-
-    document.addEventListener('mousemove', (e) => {
-        if (document.pointerLockElement) {
-            camera.rotation.y -= e.movementX * 0.002;
-            camera.rotation.x -= e.movementY * 0.002;
-            camera.rotation.x = Math.max(-1.5, Math.min(1.5, camera.rotation.x));
-            camera.rotation.z = 0;
+        /* Ecran de chargement */
+        #overlay {
+            position: absolute; inset: 0; z-index: 1000;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: radial-gradient(circle, #1a1a1a 0%, #000 100%); color: white;
         }
-    });
 
-    function animate() {
-        requestAnimationFrame(animate);
-        if (document.pointerLockElement) {
-            const speed = keys['ShiftLeft'] ? 0.35 : 0.18;
-            
-            if (keys['KeyW']) camera.translateZ(-speed);
-            if (keys['KeyS']) camera.translateZ(speed);
-            if (keys['KeyA']) camera.translateX(-speed);
-            if (keys['KeyD']) camera.translateX(speed);
+        #loader-bar-container { width: 250px; height: 8px; background: #333; border-radius: 4px; margin: 20px; overflow: hidden; }
+        #loader-bar { width: 0%; height: 100%; background: #ff4757; transition: width 0.3s; }
 
-            if (camera.position.y > -9.8) {
-                velocityY -= 0.01;
-                canJump = false;
-            } else {
-                velocityY = 0;
-                camera.position.y = -9.8;
-                canJump = true; // --- RÉACTIVE LE SAUT ---
-            }
-            camera.position.y += velocityY;
-
-            if (flashlight) {
-                flashlight.position.copy(camera.position);
-                const vector = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-                flashlight.target.position.copy(camera.position).add(vector);
-            }
+        #btn-play {
+            padding: 15px 50px; font-size: 20px; font-weight: bold; color: white;
+            background: #ff4757; border: none; border-radius: 5px; cursor: pointer;
+            display: none; box-shadow: 0 4px 15px rgba(255, 71, 87, 0.4);
         }
-        renderer.render(scene, camera);
-    }
-</script>
+
+        /* Interface en jeu */
+        #crosshair { 
+            position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; 
+            background: white; border-radius: 50%; transform: translate(-50%, -50%); 
+            border: 1px solid black; pointer-events: none; z-index: 10;
+        }
+        
+        #hud {
+            position: absolute; bottom: 20px; left: 20px; color: white;
+            pointer-events: none; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            font-size: 14px; line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <h1 style="letter-spacing: 5px;">MURDER MYSTERY X</h1>
+        <div id="loader-bar-container"><div id="loader-bar"></div></div>
+        <div id="status">Chargement de la maison...</div>
+        <button id="btn-play">JOUER</button>
+    </div>
+
+    <div id="crosshair"></div>
+    <div id="hud">
+        <b>[Z,Q,S,D]</b> Marcher | <b>[MAJ]</b> Courir<br>
+        <b>[F]</b> Lampe Torche | <b>[ESPACE]</b> Sauter
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="
